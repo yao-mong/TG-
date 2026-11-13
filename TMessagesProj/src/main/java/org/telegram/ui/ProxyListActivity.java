@@ -23,6 +23,7 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -31,6 +32,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -40,8 +42,9 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ClashCoreManager;
 import org.telegram.messenger.ClashProxyHelper;
+import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.DownloadController;
 import org.telegram.messenger.LocaleController;
@@ -67,6 +70,7 @@ import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
 import org.telegram.ui.Cells.TextSettingsCell;
 import org.telegram.ui.Components.CheckBox2;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
@@ -95,7 +99,9 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
     @Keep
     private int useProxyRow;
     private int useProxyShadowRow;
-    private int clashRow;                 // Geekram: Clash 本机代理开关
+    private int clashRow;                 // Geekrem: Clash 本机代理开关
+    private int clashSubRow;              // Geekgram: Clash 订阅入口
+    private int clashStatusRow;           // Geekgram: 内置内核状态
     private int connectionsHeaderRow;
     private int proxyStartRow;
     private int proxyEndRow;
@@ -457,7 +463,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                     }
                 }
             } else if (position == clashRow) {
-                // Geekram: 一键开关 Clash 本机代理
+                // Geekrem: 一键开关 Clash 本机代理
                 boolean enabled = !ClashProxyHelper.isAutoEnabled();
                 ClashProxyHelper.setAutoEnabled(enabled);
                 if (view instanceof TextCheckCell) {
@@ -465,13 +471,26 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                 }
                 if (enabled) {
                     ClashProxyHelper.applyAsync(true);
+                    ClashCoreManager.autoStart();
                     useProxySettings = true;
+                } else {
+                    ClashCoreManager.stop();
                 }
                 updateRows(false);
                 RecyclerListView.Holder holder = (RecyclerListView.Holder) listView.findViewHolderForAdapterPosition(useProxyRow);
                 if (holder != null && holder.itemView instanceof TextCheckCell) {
                     ((TextCheckCell) holder.itemView).setChecked(useProxySettings);
                 }
+            } else if (position == clashSubRow) {
+                showClashSubDialog();
+            } else if (position == clashStatusRow) {
+                if (ClashCoreManager.isRunning()) {
+                    ClashCoreManager.stop();
+                    Toast.makeText(getParentActivity(), "内核已停止", Toast.LENGTH_SHORT).show();
+                } else {
+                    startClashCore(true);
+                }
+                refreshClashRows();
             } else if (position == rotationRow) {
                 SharedConfig.proxyRotationEnabled = !SharedConfig.proxyRotationEnabled;
                 TextCheckCell textCheckCell = (TextCheckCell) view;
@@ -650,6 +669,13 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
             useProxyShadowRow = -1;
         }
         clashRow = rowCount++;
+        if (ClashProxyHelper.isAutoEnabled()) {
+            clashSubRow = rowCount++;
+            clashStatusRow = rowCount++;
+        } else {
+            clashSubRow = -1;
+            clashStatusRow = -1;
+        }
         connectionsHeaderRow = rowCount++;
 
         if (notify) {
@@ -880,6 +906,11 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                     } else if (position == deleteAllRow) {
                         ThemeBind.textColor(textCell.getTextView(), Theme.key_text_RedRegular);
                         textCell.setText(getString(R.string.DeleteAllProxies), false);
+                    } else if (position == clashSubRow) {
+                        String sub = ClashCoreManager.getSubscription();
+                        textCell.setTextAndValue("Clash 订阅", shortSub(sub), true);
+                    } else if (position == clashStatusRow) {
+                        textCell.setTextAndValue("内置内核", ClashCoreManager.statusText(), true);
                     }
                     break;
                 }
@@ -980,7 +1011,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
             int position = holder.getAdapterPosition();
-            return position == useProxyRow || position == rotationRow || position == clashRow || position == proxyAddRow || position == deleteAllRow || position >= proxyStartRow && position < proxyEndRow;
+            return position == useProxyRow || position == rotationRow || position == clashRow || position == clashSubRow || position == clashStatusRow || position == proxyAddRow || position == deleteAllRow || position >= proxyStartRow && position < proxyEndRow;
         }
 
         @Override
@@ -1051,7 +1082,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
         public int getItemViewType(int position) {
             if (position == useProxyShadowRow || position == proxyShadowRow) {
                 return VIEW_TYPE_SHADOW;
-            } else if (position == proxyAddRow || position == deleteAllRow) {
+            } else if (position == proxyAddRow || position == deleteAllRow || position == clashSubRow || position == clashStatusRow) {
                 return VIEW_TYPE_TEXT_SETTING;
             } else if (position == useProxyRow || position == rotationRow || position == clashRow) {
                 return VIEW_TYPE_TEXT_CHECK;
@@ -1065,6 +1096,105 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                 return VIEW_TYPE_INFO;
             }
         }
+    }
+
+    // ------------------------------------------------- Geekgram: Clash 订阅
+
+    private String shortSub(String sub) {
+        if (TextUtils.isEmpty(sub)) {
+            return "未设置，点这里填";
+        }
+        String out = sub;
+        int idx = out.indexOf("/sub/");
+        if (idx > 0 && out.length() - idx > 26) {
+            out = "…/sub/" + out.substring(idx + 5, Math.min(out.length(), idx + 5 + 10)) + "…";
+        } else if (out.length() > 36) {
+            out = out.substring(0, 16) + "…" + out.substring(out.length() - 8);
+        }
+        return out;
+    }
+
+    private void refreshClashRows() {
+        try {
+            useProxySettings = MessagesController.getGlobalMainSettings().getBoolean("proxy_enabled", false);
+            if (listAdapter != null) {
+                listAdapter.notifyDataSetChanged();
+            }
+        } catch (Throwable ignore) {
+        }
+    }
+
+    private void startClashCore(boolean forceRefresh) {
+        if (!ClashCoreManager.hasSubscription()) {
+            showClashSubDialog();
+            return;
+        }
+        final Context context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+        if (ClashCoreManager.isBusy()) {
+            Toast.makeText(context, "正在启动，稍等一下", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Toast.makeText(context, "正在拉取订阅并启动内核…", Toast.LENGTH_SHORT).show();
+        refreshClashRows();
+        ClashCoreManager.startAsync(null, forceRefresh, (ok, error) -> {
+            refreshClashRows();
+            Context c = getParentActivity();
+            if (c == null) {
+                return;
+            }
+            if (ok) {
+                Toast.makeText(c, "内核已启动，代理已接管", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(c, "启动失败：" + (TextUtils.isEmpty(error) ? "未知原因" : error), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void showClashSubDialog() {
+        final Context context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+        final EditTextBoldCursor editText = new EditTextBoldCursor(context);
+        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        editText.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
+        editText.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint));
+        editText.setHint("https://…/sub/xxxx");
+        editText.setText(ClashCoreManager.getSubscription());
+        editText.setSelection(editText.getText().length());
+        editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        editText.setSingleLine(true);
+
+        FrameLayout container = new FrameLayout(context);
+        container.addView(editText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.LEFT | Gravity.TOP, 24, 4, 24, 0));
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(context)
+                .setTitle("Clash 订阅")
+                .setView(container)
+                .setPositiveButton("保存并连接", (dialog, which) -> {
+                    String url = editText.getText().toString().trim();
+                    if (TextUtils.isEmpty(url) || !(url.startsWith("http://") || url.startsWith("https://"))) {
+                        Toast.makeText(context, "链接要以 http 开头", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    ClashCoreManager.setSubscription(url);
+                    ClashCoreManager.stop();
+                    refreshClashRows();
+                    startClashCore(true);
+                })
+                .setNegativeButton("取消", null);
+        if (ClashCoreManager.hasSubscription()) {
+            builder.setNeutralButton("停止内核", (dialog, which) -> {
+                ClashCoreManager.stop();
+                refreshClashRows();
+            });
+        }
+        AlertDialog dialog = builder.create();
+        dialog.show();
+        editText.requestFocus();
     }
 
     @Override
