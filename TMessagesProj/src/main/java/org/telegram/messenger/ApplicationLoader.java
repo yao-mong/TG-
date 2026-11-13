@@ -366,7 +366,7 @@ public class ApplicationLoader extends Application {
         LauncherIconController.tryFixLauncherIconIfNeeded();
         ProxyRotationController.init();
 
-        // Geekrem: 启动后自动探测本机 Clash，探到就接管连接（可在代理页关闭）
+        // Geekram: 启动后自动探测本机 Clash，探到就接管连接（可在代理页关闭）
         AndroidUtilities.runOnUIThread(ClashProxyHelper::autoInit, 2500);
 
         //if (BuildConfig.DEBUG_PRIVATE_VERSION) {

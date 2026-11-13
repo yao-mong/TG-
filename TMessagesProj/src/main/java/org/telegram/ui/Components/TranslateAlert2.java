@@ -393,7 +393,7 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
                     textView.setText(translated);
                     adapter.updateMainView(textViewContainer);
                 } else {
-                    // Geekrem: 服务端翻译不可用（非会员/额度/网络）时自动走备用翻译通道
+                    // Geekram: 服务端翻译不可用（非会员/额度/网络）时自动走备用翻译通道
                     translateAlt(textWithEntities.text);
                 }
             });
@@ -432,7 +432,7 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
                     textView.setText(translated);
                     adapter.updateMainView(textViewContainer);
                 } else {
-                    // Geekrem: 服务端翻译不可用（非会员/额度/网络）时自动走备用翻译通道
+                    // Geekram: 服务端翻译不可用（非会员/额度/网络）时自动走备用翻译通道
                     translateAlt(textWithEntities.text);
                 }
             });

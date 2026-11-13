@@ -762,11 +762,11 @@ public class MessagesController extends BaseController implements NotificationCe
     public boolean giftTextFieldIcon;
 
     public boolean isTranslationsManualEnabled() {
-        // Geekrem: 强制开启翻译入口
+        // Geekram: 强制开启翻译入口
         return true;
     }
     public boolean isTranslationsAutoEnabled() {
-        // Geekrem: 强制开启整段翻译
+        // Geekram: 强制开启整段翻译
         return true;
     }
 

@@ -1,5 +1,5 @@
 /*
- * Geekrem - 内置 Clash 代理支持
+ * Geekram - 内置 Clash 代理支持
  *
  * Clash / Clash Meta / Mihomo 默认提供本机混合端口（同时支持 SOCKS5 与 HTTP）：
  *   7890  mixed   （默认）

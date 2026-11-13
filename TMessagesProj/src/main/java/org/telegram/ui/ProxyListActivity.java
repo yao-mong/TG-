@@ -41,6 +41,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ClashProxyHelper;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.DownloadController;
 import org.telegram.messenger.LocaleController;
@@ -94,7 +95,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
     @Keep
     private int useProxyRow;
     private int useProxyShadowRow;
-    private int clashRow;                 // Geekrem: Clash 本机代理开关
+    private int clashRow;                 // Geekram: Clash 本机代理开关
     private int connectionsHeaderRow;
     private int proxyStartRow;
     private int proxyEndRow;
@@ -456,7 +457,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                     }
                 }
             } else if (position == clashRow) {
-                // Geekrem: 一键开关 Clash 本机代理
+                // Geekram: 一键开关 Clash 本机代理
                 boolean enabled = !ClashProxyHelper.isAutoEnabled();
                 ClashProxyHelper.setAutoEnabled(enabled);
                 if (view instanceof TextCheckCell) {

@@ -90,12 +90,12 @@ public class TranslateController extends BaseController {
         AndroidUtilities.runOnUIThread(this::loadTranslatingDialogsCached, 150);
     }
 
-    // Geekrem: 翻译功能对所有账号开放，不再要求 Premium
+    // Geekram: 翻译功能对所有账号开放，不再要求 Premium
     public boolean isFeatureAvailable() {
         return isChatTranslateEnabled();
     }
 
-    // Geekrem: 单聊/群聊翻译同样不再校验会员状态
+    // Geekram: 单聊/群聊翻译同样不再校验会员状态
     public boolean isFeatureAvailable(long dialogId) {
         return isChatTranslateEnabled();
     }
@@ -104,7 +104,7 @@ public class TranslateController extends BaseController {
     private Boolean contextTranslateEnabled;
 
     public boolean isChatTranslateEnabled() {
-        // Geekrem: 不再受服务端开关限制
+        // Geekram: 不再受服务端开关限制
         if (chatTranslateEnabled == null) {
             chatTranslateEnabled = messagesController.getMainSettings().getBoolean("translate_chat_button", true);
         }
@@ -112,7 +112,7 @@ public class TranslateController extends BaseController {
     }
 
     public boolean isContextTranslateEnabled() {
-        // Geekrem: 长按翻译默认开启，且不受服务端开关限制
+        // Geekram: 长按翻译默认开启，且不受服务端开关限制
         if (contextTranslateEnabled == null) {
             contextTranslateEnabled = messagesController.getMainSettings().getBoolean("translate_button", MessagesController.getGlobalMainSettings().getBoolean("translate_button", true));
         }
@@ -1181,7 +1181,7 @@ public class TranslateController extends BaseController {
                         toggleTranslatingDialog(dialogId, false);
                         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, Bulletin.TYPE_ERROR, getString(R.string.TranslationFailedAlert2));
                     } else {
-                        // Geekrem: 服务端翻译失败（含非会员、额度用尽、网络异常）时
+                        // Geekram: 服务端翻译失败（含非会员、额度用尽、网络异常）时
                         // 自动切到本地备用翻译通道，保证任何账号都能翻
                         for (int i = 0; i < ids.size(); ++i) {
                             final int _id = ids.get(i);

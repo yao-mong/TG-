@@ -226,7 +226,7 @@ public class LanguageSelectActivity extends BaseFragment implements Notification
                         NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.updateSearchSettings);
                     } else if (position == autoTranslationPosition) {
                         boolean value = !getChatValue();
-                        // Geekrem: 不再拦截非会员
+                        // Geekram: 不再拦截非会员
                         getMessagesController().getTranslateController().setChatTranslateEnabled(value);
                         NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.updateSearchSettings);
                         ((TextCheckCell) view).setChecked(value);
