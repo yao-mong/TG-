@@ -34,7 +34,6 @@ public class GeekgramSettingsActivity extends Activity {
 
     private LinearLayout content;
     private TextView updateSub;
-    private TextView baseSub;
     private TextView revokeSub;
     private TextView recordSub;
 
@@ -110,9 +109,6 @@ public class GeekgramSettingsActivity extends Activity {
         updateSub = new TextView(this);
         addRow("检查更新", updateSub, v -> checkUpdate());
 
-        baseSub = new TextView(this);
-        addRow("云更新服务器", baseSub, v -> editBase());
-
         revokeSub = new TextView(this);
         addRow("防撤回(本地缓存)", revokeSub, v -> {
             GeekgramRevokeCache.setEnabled(!GeekgramRevokeCache.isEnabled());
@@ -124,7 +120,7 @@ public class GeekgramSettingsActivity extends Activity {
         addRow("撤回记录", recordSub, v -> startActivity(new android.content.Intent(this, GeekgramRevokeActivity.class)));
 
         TextView note = new TextView(this);
-        note.setText("更新只走这里的云更新服务器,官方 Telegram 更新通道已关闭。\n对方撤回消息时,原文会先存在本机,撤回了也能在「撤回记录」里翻看。");
+        note.setText("更新走固定的云更新服务器,官方 Telegram 更新通道已关闭。\n对方撤回消息时,原文会先存在本机,撤回了也能在「撤回记录」里翻看。");
         note.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         note.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
         note.setLineSpacing(dp(4), 1f);
@@ -138,7 +134,6 @@ public class GeekgramSettingsActivity extends Activity {
         String info = GeekgramUpdateChecker.getLastInfo() != null && GeekgramUpdateChecker.getLastInfo().hasUpdate
                 ? "有新版本可更新" : "点击检查是否有新版本";
         updateSub.setText(info);
-        baseSub.setText(GeekgramUpdateChecker.getBaseUrl());
         boolean on = GeekgramRevokeCache.isEnabled();
         int count = GeekgramRevokeCache.count();
         revokeSub.setText((on ? "已开启" : "已关闭") + " · 已缓存 " + count + " 条");
@@ -159,31 +154,6 @@ public class GeekgramSettingsActivity extends Activity {
             refreshSubtitles();
             GeekgramUpdateChecker.showAnnouncement(this, info);
         });
-    }
-
-    private void editBase() {
-        final EditText input = new EditText(this);
-        input.setInputType(InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_CLASS_TEXT);
-        input.setSingleLine(true);
-        input.setText(GeekgramUpdateChecker.getBaseUrl());
-        input.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
-        input.setHint("https://你的后台域名");
-        input.setPadding(dp(20), dp(12), dp(20), dp(12));
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("云更新服务器");
-        builder.setView(input);
-        builder.setPositiveButton("保存", (d, w) -> {
-            GeekgramUpdateChecker.setBaseUrl(input.getText().toString().trim());
-            refreshSubtitles();
-            Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show();
-        });
-        builder.setNegativeButton("取消", null);
-        builder.setNeutralButton("恢复默认", (d, w) -> {
-            GeekgramUpdateChecker.setBaseUrl(GeekgramUpdateChecker.DEFAULT_BASE);
-            refreshSubtitles();
-        });
-        builder.show();
     }
 
     private void addRow(String title, TextView subView, View.OnClickListener onClick) {

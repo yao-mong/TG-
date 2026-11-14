@@ -1,8 +1,31 @@
 # Geekgram 工程状态
 
-当前交付：v9（output/Geekgram-13.2.3-arm64-v9.apk）
-versionCode 73099 / versionName 13.2.3 / 包名 com.geekrem.messenger
+当前交付：v10（output/Geekgram-13.2.4-arm64-v10.apk）
+versionCode 73109 / versionName 13.2.4 / 包名 com.geekrem.messenger
 签名 SHA256 d221217b…526fd4（v2 起未变，可覆盖安装）
+
+## v10 修复（「后台发了新版，App 不提示更新」）
+- **根因**：后台接口统一返回 `{code,message,data:{...}}`，客户端 `parse()` 直接在**顶层**
+  读 `hasUpdate` / `versionCode` / `url`，字段全在 `data` 里 → 永远读不到 → hasUpdate 恒为 false。
+  所以不管后台发多少版，App 都不弹、横幅也不出。**跟后台数据无关，是客户端解析写错了。**
+- 修复：`parse()` 先取 `data` 对象再读字段；后台 `code!=0` 时抛错提示，
+  本地缓存（扁平结构）仍然兼容。
+- 顺带两处：
+  1. 升级安装后（versionCode 变了）绕过 10 分钟检查间隔，立刻查一次；
+  2. 横幅加 `versionCode > 当前` 判断，装上新版后不会残留旧横幅。
+- 按用户要求：**服务器地址固定**。`getBaseUrl()` 直接返回 DEFAULT_BASE，不读本地覆盖值；
+  设置页去掉「云更新服务器」行，代理页长按改地址的入口和对话框一起删掉。
+
+## v10 已验证
+- aapt2 badging：versionCode 73109 / versionName 13.2.4 / arm64-v8a
+- 签名指纹与 v9 一致（d2:21:21:7b…:52:6f:d4），可直接覆盖安装
+- dex 内含新解析串「服务返回错误 code=」→ 新代码确实打进包里
+- 4 个 native so 齐全（libtmessages.49 / libclashcore / libtwidget / liblanguage_id / libdatastore）
+- 后台接口：vc=73099 → hasUpdate=true / 73109 / 13.2.4 / force=true；
+  vc=73109 → hasUpdate=false
+- 直链实测：https://geekgram-dl.web.zaka.live/Geekgram-13.2.4-73109.apk
+  md5=a257e0c24b02cb39dec855c947c7a1b3，与本地包一致（63,106,355 字节）
+- 注意：latest.apk 走 CDN 有 4 小时缓存，所以新包用**带版本号的文件名**，发版别复用同名文件
 
 ## v9 修复（v8 的闪退）
 - **根因**：v8 新增的 GeekgramSettingsActivity / GeekgramRevokeActivity **没有写进

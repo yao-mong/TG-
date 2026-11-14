@@ -74,7 +74,7 @@ public class GeekgramUpdateBanner extends FrameLayout implements GeekgramUpdateC
     @Override
     public void onUpdateState(GeekgramUpdateChecker.Info info) {
         AndroidUtilities.runOnUIThread(() -> {
-            if (info == null || !info.hasUpdate) {
+            if (info == null || !info.hasUpdate || info.versionCode <= GeekgramUpdateChecker.getVersionCode()) {
                 setVisibility(GONE);
                 return;
             }

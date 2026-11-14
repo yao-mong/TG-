@@ -35,6 +35,7 @@ public class GeekgramUpdateChecker {
 
     private static final String PREF_BASE = "geekgram_update_base";
     private static final String PREF_LAST = "geekgram_update_last";
+    private static final String PREF_LAST_VC = "geekgram_update_last_vc";
     private static final String PREF_INFO = "geekgram_update_info";
     private static final String PREF_SEEN = "geekgram_update_seen";
     private static final String PREF_FORCE_VC = "geekgram_force_vc";
@@ -77,11 +78,8 @@ public class GeekgramUpdateChecker {
     }
 
     public static String getBaseUrl() {
-        String url = prefs().getString(PREF_BASE, null);
-        if (TextUtils.isEmpty(url)) {
-            url = DEFAULT_BASE;
-        }
-        return url;
+        // 服务器地址固定，不读本地覆盖值（设置里已不提供修改入口）
+        return DEFAULT_BASE;
     }
 
     public static void setBaseUrl(String url) {
@@ -189,9 +187,12 @@ public class GeekgramUpdateChecker {
             }
         }
         final long last = prefs().getLong(PREF_LAST, 0);
-        if (System.currentTimeMillis() - last < MIN_INTERVAL_MS) {
+        final int lastVc = prefs().getInt(PREF_LAST_VC, 0);
+        // 升级安装后（版本号变了）无条件立刻检查一次，不吃 10 分钟间隔
+        if (lastVc == getVersionCode() && System.currentTimeMillis() - last < MIN_INTERVAL_MS) {
             return;
         }
+        prefs().edit().putInt(PREF_LAST_VC, getVersionCode()).apply();
         checkAsync(activity, false, null);
     }
 
@@ -289,7 +290,18 @@ public class GeekgramUpdateChecker {
     }
 
     private static Info parse(String json) throws Exception {
-        JSONObject o = new JSONObject(json);
+        JSONObject root = new JSONObject(json);
+        JSONObject o = root;
+        // 后台统一返回 {code:0,message:"ok",data:{...}}，真正的字段在 data 里；
+        // 本地缓存是扁平结构（无 data 层），两种都要能读
+        JSONObject data = root.optJSONObject("data");
+        if (data != null) {
+            int code = root.optInt("code", 0);
+            if (code != 0) {
+                throw new Exception(root.optString("message", "服务返回错误 code=" + code));
+            }
+            o = data;
+        }
         Info info = new Info();
         info.ok = o.optBoolean("ok", true);
         info.hasUpdate = o.optBoolean("hasUpdate", false);

@@ -563,10 +563,6 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
             }
         });
         listView.setOnItemLongClickListener((view, position) -> {
-            if (position == updateRow) {
-                showUpdateBaseDialog();
-                return true;
-            }
             if (position >= proxyStartRow && position < proxyEndRow) {
                 listAdapter.toggleSelected(position);
                 return true;
@@ -1178,10 +1174,6 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
         if (context == null) {
             return;
         }
-        if (!GeekgramUpdateChecker.isConfigured()) {
-            showUpdateBaseDialog();
-            return;
-        }
         Toast.makeText(context, "正在检查更新…", Toast.LENGTH_SHORT).show();
         GeekgramUpdateChecker.checkAsync((Activity) context, true, (ok, error, info) -> {
             Context c = getParentActivity();
@@ -1194,44 +1186,6 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                 Toast.makeText(c, "已是最新版本", Toast.LENGTH_SHORT).show();
             }
         });
-    }
-
-    private void showUpdateBaseDialog() {
-        final Context context = getParentActivity();
-        if (context == null) {
-            return;
-        }
-        final EditTextBoldCursor editText = new EditTextBoldCursor(context);
-        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
-        editText.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
-        editText.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint));
-        editText.setHint("https://你的Worker地址");
-        editText.setText(GeekgramUpdateChecker.getBaseUrl());
-        editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        editText.setSingleLine(true);
-
-        FrameLayout container = new FrameLayout(context);
-        container.addView(editText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.LEFT | Gravity.TOP, 24, 4, 24, 0));
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(context)
-                .setTitle("云更新服务器")
-                .setView(container)
-                .setNegativeButton("取消", null)
-                .setPositiveButton("保存并检查", (dialog, which) -> {
-                    String url = editText.getText().toString().trim();
-                    if (!url.isEmpty() && !url.startsWith("http://") && !url.startsWith("https://")) {
-                        Toast.makeText(context, "地址要以 http 开头", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    GeekgramUpdateChecker.setBaseUrl(url);
-                    if (listAdapter != null) {
-                        listAdapter.notifyDataSetChanged();
-                    }
-                    if (!url.isEmpty()) {
-                        checkForUpdate();
-                    }
-                });
-        builder.show();
     }
 
     private void openYoyoPanel() {
