@@ -13,6 +13,7 @@ import static org.telegram.messenger.LocaleController.getString;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
+import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -43,6 +44,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.ClashCoreManager;
+import org.telegram.messenger.GeekgramUpdateChecker;
 import org.telegram.messenger.ClashProxyHelper;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
@@ -102,6 +104,8 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
     private int clashRow;                 // Geekrem: Clash 本机代理开关
     private int clashSubRow;              // Geekgram: Clash 订阅入口
     private int clashStatusRow;           // Geekgram: 内置内核状态
+    private int yoyoRow;                  // Geekgram: YOYO 面板（登录/注册获取订阅）
+    private int updateRow;                // Geekgram: 云更新检查
     private int connectionsHeaderRow;
     private int proxyStartRow;
     private int proxyEndRow;
@@ -481,6 +485,10 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                 if (holder != null && holder.itemView instanceof TextCheckCell) {
                     ((TextCheckCell) holder.itemView).setChecked(useProxySettings);
                 }
+            } else if (position == yoyoRow) {
+                openYoyoPanel();
+            } else if (position == updateRow) {
+                checkForUpdate();
             } else if (position == clashSubRow) {
                 showClashSubDialog();
             } else if (position == clashStatusRow) {
@@ -555,6 +563,10 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
             }
         });
         listView.setOnItemLongClickListener((view, position) -> {
+            if (position == updateRow) {
+                showUpdateBaseDialog();
+                return true;
+            }
             if (position >= proxyStartRow && position < proxyEndRow) {
                 listAdapter.toggleSelected(position);
                 return true;
@@ -669,6 +681,8 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
             useProxyShadowRow = -1;
         }
         clashRow = rowCount++;
+        yoyoRow = rowCount++;
+        updateRow = rowCount++;
         if (ClashProxyHelper.isAutoEnabled()) {
             clashSubRow = rowCount++;
             clashStatusRow = rowCount++;
@@ -906,6 +920,12 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                     } else if (position == deleteAllRow) {
                         ThemeBind.textColor(textCell.getTextView(), Theme.key_text_RedRegular);
                         textCell.setText(getString(R.string.DeleteAllProxies), false);
+                    } else if (position == updateRow) {
+                        textCell.setTextAndValue("检查更新",
+                                GeekgramUpdateChecker.isConfigured() ? "点击检查 · 长按改服务器" : "未配置服务器 · 长按设置", true);
+                    } else if (position == yoyoRow) {
+                        String sub = ClashCoreManager.getSubscription();
+                        textCell.setTextAndValue("YOYO 面板", TextUtils.isEmpty(sub) ? "登录 / 注册 · 获取订阅" : "已导入订阅 · 重新登录", true);
                     } else if (position == clashSubRow) {
                         String sub = ClashCoreManager.getSubscription();
                         textCell.setTextAndValue("Clash 订阅", shortSub(sub), true);
@@ -1011,7 +1031,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
             int position = holder.getAdapterPosition();
-            return position == useProxyRow || position == rotationRow || position == clashRow || position == clashSubRow || position == clashStatusRow || position == proxyAddRow || position == deleteAllRow || position >= proxyStartRow && position < proxyEndRow;
+            return position == useProxyRow || position == rotationRow || position == clashRow || position == yoyoRow || position == updateRow || position == clashSubRow || position == clashStatusRow || position == proxyAddRow || position == deleteAllRow || position >= proxyStartRow && position < proxyEndRow;
         }
 
         @Override
@@ -1082,7 +1102,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
         public int getItemViewType(int position) {
             if (position == useProxyShadowRow || position == proxyShadowRow) {
                 return VIEW_TYPE_SHADOW;
-            } else if (position == proxyAddRow || position == deleteAllRow || position == clashSubRow || position == clashStatusRow) {
+            } else if (position == proxyAddRow || position == deleteAllRow || position == yoyoRow || position == updateRow || position == clashSubRow || position == clashStatusRow) {
                 return VIEW_TYPE_TEXT_SETTING;
             } else if (position == useProxyRow || position == rotationRow || position == clashRow) {
                 return VIEW_TYPE_TEXT_CHECK;
@@ -1151,6 +1171,79 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                 Toast.makeText(c, "启动失败：" + (TextUtils.isEmpty(error) ? "未知原因" : error), Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    private void checkForUpdate() {
+        final Context context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+        if (!GeekgramUpdateChecker.isConfigured()) {
+            showUpdateBaseDialog();
+            return;
+        }
+        Toast.makeText(context, "正在检查更新…", Toast.LENGTH_SHORT).show();
+        GeekgramUpdateChecker.checkAsync((Activity) context, true, (ok, error, info) -> {
+            Context c = getParentActivity();
+            if (c == null) {
+                return;
+            }
+            if (!ok) {
+                Toast.makeText(c, "检查失败：" + error, Toast.LENGTH_SHORT).show();
+            } else if (info == null || !info.hasUpdate) {
+                Toast.makeText(c, "已是最新版本", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void showUpdateBaseDialog() {
+        final Context context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+        final EditTextBoldCursor editText = new EditTextBoldCursor(context);
+        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        editText.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
+        editText.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint));
+        editText.setHint("https://你的Worker地址");
+        editText.setText(GeekgramUpdateChecker.getBaseUrl());
+        editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        editText.setSingleLine(true);
+
+        FrameLayout container = new FrameLayout(context);
+        container.addView(editText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.LEFT | Gravity.TOP, 24, 4, 24, 0));
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(context)
+                .setTitle("云更新服务器")
+                .setView(container)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("保存并检查", (dialog, which) -> {
+                    String url = editText.getText().toString().trim();
+                    if (!url.isEmpty() && !url.startsWith("http://") && !url.startsWith("https://")) {
+                        Toast.makeText(context, "地址要以 http 开头", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    GeekgramUpdateChecker.setBaseUrl(url);
+                    if (listAdapter != null) {
+                        listAdapter.notifyDataSetChanged();
+                    }
+                    if (!url.isEmpty()) {
+                        checkForUpdate();
+                    }
+                });
+        builder.show();
+    }
+
+    private void openYoyoPanel() {
+        Context context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+        try {
+            context.startActivity(new Intent(context, YoyoPanelActivity.class));
+        } catch (Throwable e) {
+            Toast.makeText(context, "打不开面板：" + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void showClashSubDialog() {

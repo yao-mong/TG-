@@ -117,6 +117,7 @@ import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FingerprintController;
+import org.telegram.messenger.GeekgramUpdateChecker;
 import org.telegram.messenger.FlagSecureReason;
 import org.telegram.messenger.GenericProvider;
 import org.telegram.messenger.GiftAuctionController;
@@ -457,6 +458,11 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         super.onCreate(savedInstanceState);
         if (Build.VERSION.SDK_INT >= 24) {
             AndroidUtilities.isInMultiwindow = isInMultiWindowMode();
+        }
+        // Geekgram: 静默检查云更新（未配置地址则自动跳过）
+        try {
+            GeekgramUpdateChecker.checkOnStart(this);
+        } catch (Throwable ignore) {
         }
         Theme.createCommonChatResources();
         Theme.createDialogsResources(this);

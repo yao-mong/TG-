@@ -192,6 +192,7 @@ import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.SvgHelper;
 import org.telegram.messenger.Timer;
 import org.telegram.messenger.TranslateController;
+import org.telegram.messenger.TranslationSettings;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.Utilities;
@@ -25676,6 +25677,11 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private long lastTranslationCheck;
+    /** Geekgram: 翻译设置变化后立刻重算当前会话的翻译 */
+    public void refreshTranslations() {
+        checkTranslation(true);
+    }
+
     private void checkTranslation(boolean force) {
         if (System.currentTimeMillis() - lastTranslationCheck > 1000) {
             force = true;
@@ -30659,6 +30665,11 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onResume() {
         super.onResume();
+        // Geekgram: 一进会话就自动翻译屏上的消息（布局完成后再补一次，确保刚渲染的也能翻到）
+        if (TranslationSettings.isAutoTranslateEnabled()) {
+            checkTranslation(true);
+            AndroidUtilities.runOnUIThread(this::refreshTranslations, 600);
+        }
         checkShowBlur(false);
         activityResumeTime = System.currentTimeMillis();
         if (openImport && getSendMessagesHelper().getImportingHistory(dialog_id) != null) {

@@ -2135,7 +2135,7 @@ public class MessageObject {
         emojiAnimatedSticker = null;
         emojiAnimatedStickerId = null;
         if (emojiOnlyCount == 1 && !(getMedia(messageOwner) instanceof TLRPC.TL_messageMediaWebPage) && !(getMedia(messageOwner) instanceof TLRPC.TL_messageMediaInvoice) && (getMedia(messageOwner) instanceof TLRPC.TL_messageMediaEmpty || getMedia(messageOwner) == null) && this.messageOwner.grouped_id == 0) {
-            if (messageOwner.entities.isEmpty()) {
+            if (getEntities().isEmpty()) {
                 CharSequence emoji = messageText;
                 int index;
                 if ((index = TextUtils.indexOf(emoji, "\uD83C\uDFFB")) >= 0) {
@@ -3837,7 +3837,7 @@ public class MessageObject {
             TranslateController.isTranslatable(this) &&
             translateController.isTranslatingDialog(getDialogId()) &&
             !translateController.isTranslateDialogHidden(getDialogId()) &&
-            TextUtils.equals(translateController.getDialogTranslateTo(getDialogId()), messageOwner.translatedSummaryLanguage)
+            TranslateController.sameLanguage(translateController.getDialogTranslateTo(getDialogId()), messageOwner.translatedSummaryLanguage)
         ) {
             if (summarized && translated) {
                 return replyUpdated || false;
@@ -3867,7 +3867,7 @@ public class MessageObject {
             translateController.isTranslatingDialog(getDialogId()) &&
             !translateController.isTranslateDialogHidden(getDialogId()) &&
             (translatedText != null || messageOwner.translatedPoll != null || messageOwner.translatedRichMessage != null) &&
-            TextUtils.equals(translateController.getDialogTranslateTo(getDialogId()), messageOwner.translatedToLanguage)
+            TranslateController.sameLanguage(translateController.getDialogTranslateTo(getDialogId()), messageOwner.translatedToLanguage)
         ) {
             if (translated && !summarized) {
                 return replyUpdated || false;
@@ -3877,7 +3877,9 @@ public class MessageObject {
             if (type == TYPE_ARTICLE) {
                 generateLayout(null);
             } else if (translatedText != null) {
-                applyNewText(translatedText.text);
+                // Geekgram: 显示原文和译文
+                final boolean showOriginal = TranslationSettings.isShowOriginal() && !TextUtils.isEmpty(messageOwner.message);
+                applyNewText(showOriginal ? (CharSequence) (messageOwner.message + "\n" + translatedText.text) : translatedText.text);
                 generateCaption();
             }
             return replyUpdated || true;
@@ -7863,7 +7865,7 @@ public class MessageObject {
         }
         captionLinksHidden = hideLinks;
         String text = messageOwner.message;
-        ArrayList<TLRPC.MessageEntity> entities = messageOwner.entities;
+        ArrayList<TLRPC.MessageEntity> entities = safeEntities(messageOwner.entities);
         boolean forceManualEntities = false;
         if (type == TYPE_STORY) {
             if (messageOwner.media != null && messageOwner.media.storyItem != null) {
@@ -7890,8 +7892,10 @@ public class MessageObject {
         } else if (messageOwner.translatedText != null && translated) {
             captionSummarized = false;
             captionTranslated = true;
-            text = messageOwner.translatedText.text;
-            entities = messageOwner.translatedText.entities;
+            // Geekgram: 显示原文和译文
+            final boolean showOriginal = TranslationSettings.isShowOriginal() && !TextUtils.isEmpty(messageOwner.message);
+            text = showOriginal ? (messageOwner.message + "\n" + messageOwner.translatedText.text) : messageOwner.translatedText.text;
+            entities = showOriginal ? new ArrayList<>() : messageOwner.translatedText.entities;
         } else {
             captionSummarized = false;
             captionTranslated = false;
@@ -8228,24 +8232,35 @@ public class MessageObject {
         }
     }
 
+    // Geekgram: 这个方法绝不能返回 null——气泡布局、applyEntities、addEntitiesToText 都是直接
+    // 调 .isEmpty() / .size() / for-each，返回 null 必闪退（v6 的「原文+译文」崩溃就出在这里：
+    // 服务器下发的 translatedText.entities 在不带格式时是 null）。
+    private static ArrayList<TLRPC.MessageEntity> safeEntities(ArrayList<TLRPC.MessageEntity> list) {
+        return list == null ? new ArrayList<>() : list;
+    }
+
     public ArrayList<TLRPC.MessageEntity> getEntities() {
-        if (messageOwner == null) return null;
+        if (messageOwner == null) return new ArrayList<>();
         if (summarized) {
             if (translated && messageOwner.translatedSummaryText != null) {
-                return messageOwner.translatedSummaryText.entities;
+                return safeEntities(messageOwner.translatedSummaryText.entities);
             } else if (messageOwner.summaryText != null) {
-                return messageOwner.summaryText.entities;
+                return safeEntities(messageOwner.summaryText.entities);
             }
-            return null;
+            return new ArrayList<>();
         }
         if (translated) {
             if (messageOwner.voiceTranscriptionOpen) {
-                return messageOwner.translatedVoiceTranscription != null ? messageOwner.translatedVoiceTranscription.entities : null;
+                return messageOwner.translatedVoiceTranscription != null ? safeEntities(messageOwner.translatedVoiceTranscription.entities) : new ArrayList<>();
             } else {
-                return messageOwner.translatedText != null ? messageOwner.translatedText.entities : null;
+                // Geekgram: 原文+译文拼在一起时，译文的实体偏移对不上，直接不带。
+                if (TranslationSettings.isShowOriginal() && !TextUtils.isEmpty(messageOwner.message)) {
+                    return new ArrayList<>();
+                }
+                return messageOwner.translatedText != null ? safeEntities(messageOwner.translatedText.entities) : new ArrayList<>();
             }
         }
-        return messageOwner.entities;
+        return safeEntities(messageOwner.entities);
     }
 
     public Spannable replaceAnimatedEmoji(CharSequence text, Paint.FontMetricsInt fontMetricsInt) {
