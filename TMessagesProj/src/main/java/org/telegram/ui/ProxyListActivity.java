@@ -104,7 +104,8 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
     private int clashRow;                 // Geekrem: Clash 本机代理开关
     private int clashSubRow;              // Geekgram: Clash 订阅入口
     private int clashStatusRow;           // Geekgram: 内置内核状态
-    private int yoyoRow;                  // Geekgram: YOYO 面板（登录/注册获取订阅）
+    private int yoyoRow;                  // Geekgram: 内核面板（原生界面）
+    private int yoyoLoginRow;             // Geekgram: YOYO 面板（登录/注册获取订阅）
     private int updateRow;                // Geekgram: 云更新检查
     private int connectionsHeaderRow;
     private int proxyStartRow;
@@ -485,8 +486,10 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                 if (holder != null && holder.itemView instanceof TextCheckCell) {
                     ((TextCheckCell) holder.itemView).setChecked(useProxySettings);
                 }
-            } else if (position == yoyoRow) {
+            } else if (position == yoyoLoginRow) {
                 openYoyoPanel();
+            } else if (position == yoyoRow) {
+                openCorePanel();
             } else if (position == updateRow) {
                 checkForUpdate();
             } else if (position == clashSubRow) {
@@ -677,6 +680,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
             useProxyShadowRow = -1;
         }
         clashRow = rowCount++;
+        yoyoLoginRow = rowCount++;
         yoyoRow = rowCount++;
         updateRow = -1; // Geekgram: 「检查更新」已移到 设置 -> Geekgram
         if (ClashProxyHelper.isAutoEnabled()) {
@@ -919,6 +923,8 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                     } else if (position == updateRow) {
                         textCell.setTextAndValue("检查更新",
                                 GeekgramUpdateChecker.isConfigured() ? "点击检查 · 长按改服务器" : "未配置服务器 · 长按设置", true);
+                    } else if (position == yoyoLoginRow) {
+                        textCell.setTextAndValue("YOYO 面板", "登录 / 注册获取订阅", true);
                     } else if (position == yoyoRow) {
                         textCell.setTextAndValue("内核面板", ClashCoreManager.isRunning() ? "运行中 · 导入 / 日志" : "状态 / 导入节点 / 日志", true);
                     } else if (position == clashSubRow) {
@@ -1025,7 +1031,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
             int position = holder.getAdapterPosition();
-            return position == useProxyRow || position == rotationRow || position == clashRow || position == yoyoRow || position == updateRow || position == clashSubRow || position == clashStatusRow || position == proxyAddRow || position == deleteAllRow || position >= proxyStartRow && position < proxyEndRow;
+            return position == useProxyRow || position == rotationRow || position == clashRow || position == yoyoRow || position == yoyoLoginRow || position == updateRow || position == clashSubRow || position == clashStatusRow || position == proxyAddRow || position == deleteAllRow || position >= proxyStartRow && position < proxyEndRow;
         }
 
         @Override
@@ -1096,7 +1102,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
         public int getItemViewType(int position) {
             if (position == useProxyShadowRow || position == proxyShadowRow) {
                 return VIEW_TYPE_SHADOW;
-            } else if (position == proxyAddRow || position == deleteAllRow || position == yoyoRow || position == updateRow || position == clashSubRow || position == clashStatusRow) {
+            } else if (position == proxyAddRow || position == deleteAllRow || position == yoyoRow || position == yoyoLoginRow || position == updateRow || position == clashSubRow || position == clashStatusRow) {
                 return VIEW_TYPE_TEXT_SETTING;
             } else if (position == useProxyRow || position == rotationRow || position == clashRow) {
                 return VIEW_TYPE_TEXT_CHECK;
@@ -1192,9 +1198,23 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
             return;
         }
         try {
+            context.startActivity(new Intent(context, YoyoPanelActivity.class));
+        } catch (Throwable e) {
+            Toast.makeText(context, "打不开面板：" + (e.getMessage() == null ? "未知原因" : e.getMessage()),
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openCorePanel() {
+        Context context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+        try {
             context.startActivity(new Intent(context, CorePanelActivity.class));
         } catch (Throwable e) {
-            Toast.makeText(context, "打不开面板：" + e.getMessage(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, "打不开面板：" + (e.getMessage() == null ? "未知原因" : e.getMessage()),
+                    Toast.LENGTH_SHORT).show();
         }
     }
 

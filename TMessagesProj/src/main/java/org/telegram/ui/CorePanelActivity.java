@@ -114,6 +114,15 @@ public class CorePanelActivity extends Activity {
         btnStart = bigButton("启动内核", true, v -> toggleCore());
         actions.addView(btnStart);
         actions.addView(spaceV(8));
+        actions.addView(bigButton("YOYO 面板 · 登录 / 注册", false, v -> {
+            try {
+                startActivity(new Intent(this, YoyoPanelActivity.class));
+            } catch (Throwable e) {
+                Toast.makeText(this, "打不开面板：" + (e.getMessage() == null ? "未知原因" : e.getMessage()),
+                        Toast.LENGTH_SHORT).show();
+            }
+        }));
+        actions.addView(spaceV(8));
         actions.addView(bigButton("导入节点 / 配置", false, v -> showImportDialog()));
         actions.addView(spaceV(8));
         actions.addView(bigButton("从剪贴板导入", false, v -> importFromClipboard()));

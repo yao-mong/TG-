@@ -1,0 +1,76 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.13/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:pluginDescriptors UP-TO-DATE
+> Task :buildSrc:processResources UP-TO-DATE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+
+> Configure project :jlatexmath
+WARNING: The option setting 'android.r8.optimizedResourceShrinking=true' is experimental.
+The current default is 'false'.
+WARNING: The option setting 'android.defaults.buildfeatures.buildconfig=true' is deprecated.
+The current default is 'false'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+To keep using this feature, add the following to your module-level build.gradle files:
+    android.buildFeatures.buildConfig = true
+or from Android Studio, click: `Refactor` > `Migrate BuildConfig to Gradle Build Files`.
+
+> Configure project :TMessagesProj
+The google-services Gradle plugin needs to be applied on a project with com.android.application or com.android.dynamic-feature.
+
+> Configure project :TMessagesProj_AppHuawei
+--W- Build Environment: AGConnect plugin version is: 1.9.1.301, Gradle version is: 8.13, Android Plugin version is: 8.13.2
+--I- Using the AGConnect-Config file: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj_AppHuawei/agconnect-services.json
+--W- The variant: afatDebug, Use the json file: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj_AppHuawei/agconnect-services.json
+--I- Using the AGConnect-Config file: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj_AppHuawei/agconnect-services.json
+--W- The variant: afatRelease, Use the json file: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj_AppHuawei/agconnect-services.json
+
+> Task :jlatexmath:preBuild UP-TO-DATE
+> Task :jlatexmath:preReleaseBuild UP-TO-DATE
+> Task :jlatexmath:generateReleaseBuildConfig UP-TO-DATE
+> Task :jlatexmath:generateReleaseResValues UP-TO-DATE
+> Task :jlatexmath:generateReleaseResources UP-TO-DATE
+> Task :jlatexmath:packageReleaseResources UP-TO-DATE
+> Task :jlatexmath:processReleaseNavigationResources UP-TO-DATE
+> Task :jlatexmath:parseReleaseLocalResources UP-TO-DATE
+> Task :jlatexmath:generateReleaseRFile UP-TO-DATE
+> Task :jlatexmath:javaPreCompileRelease UP-TO-DATE
+> Task :jlatexmath:compileReleaseJavaWithJavac FAILED
+
+[Incubating] Problems report is available at: file:///var/deepbot/sessions/7089345671/ws/geekrem-13/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':jlatexmath:compileReleaseJavaWithJavac'.
+> Could not resolve all files for configuration ':jlatexmath:releaseCompileClasspath'.
+   > Could not resolve androidx.annotation:annotation:1.7.0.
+     Required by:
+         project :jlatexmath
+      > Could not resolve androidx.annotation:annotation:1.7.0.
+         > Could not get resource 'https://dl.google.com/dl/android/maven2/androidx/annotation/annotation/1.7.0/annotation-1.7.0.pom'.
+            > Could not GET 'https://dl.google.com/dl/android/maven2/androidx/annotation/annotation/1.7.0/annotation-1.7.0.pom'.
+               > dl.google.com
+      > Could not resolve androidx.annotation:annotation:1.7.0.
+         > Could not get resource 'https://repo.maven.apache.org/maven2/androidx/annotation/annotation/1.7.0/annotation-1.7.0.pom'.
+            > Could not GET 'https://repo.maven.apache.org/maven2/androidx/annotation/annotation/1.7.0/annotation-1.7.0.pom'.
+               > repo.maven.apache.org
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.13/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 10s
+13 actionable tasks: 1 executed, 12 up-to-date

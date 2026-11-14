@@ -1,0 +1,283 @@
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:pluginDescriptors UP-TO-DATE
+> Task :buildSrc:processResources UP-TO-DATE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+
+> Configure project :jlatexmath
+WARNING: The option setting 'android.r8.optimizedResourceShrinking=true' is experimental.
+The current default is 'false'.
+WARNING: The option setting 'android.defaults.buildfeatures.buildconfig=true' is deprecated.
+The current default is 'false'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+To keep using this feature, add the following to your module-level build.gradle files:
+    android.buildFeatures.buildConfig = true
+or from Android Studio, click: `Refactor` > `Migrate BuildConfig to Gradle Build Files`.
+
+> Configure project :TMessagesProj
+The google-services Gradle plugin needs to be applied on a project with com.android.application or com.android.dynamic-feature.
+
+> Configure project :TMessagesProj_AppHuawei
+--W- Build Environment: AGConnect plugin version is: 1.9.1.301, Gradle version is: 8.13, Android Plugin version is: 8.13.2
+--I- Using the AGConnect-Config file: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj_AppHuawei/agconnect-services.json
+--W- The variant: afatDebug, Use the json file: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj_AppHuawei/agconnect-services.json
+--I- Using the AGConnect-Config file: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj_AppHuawei/agconnect-services.json
+--W- The variant: afatRelease, Use the json file: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj_AppHuawei/agconnect-services.json
+
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-container:preBuild UP-TO-DATE
+> Task :jlatexmath:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-database:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-container:preReleaseBuild UP-TO-DATE
+> Task :jlatexmath:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-database:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-session:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-common:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-session:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-common:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj:checkVisibility
+> Task :TMessagesProj:preBuild
+> Task :TMessagesProj:preReleaseBuild
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-database:generateReleaseBuildConfig
+> Task :TMessagesProj:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-container:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-common:generateReleaseBuildConfig
+> Task :jlatexmath:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:generateReleaseResValues
+> Task :TMessagesProj_Modules:media3:media-lib-database:generateReleaseResValues
+> Task :TMessagesProj_Modules:media3:media-lib-container:generateReleaseResValues
+> Task :TMessagesProj_Modules:media3:media-lib-common:generateReleaseResValues
+> Task :jlatexmath:generateReleaseResValues
+> Task :TMessagesProj:generateReleaseLocalizationUtilsJava
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:generateReleaseResValues
+> Task :TMessagesProj:generateReleaseResValues
+> Task :TMessagesProj_Modules:media3:media-lib-database:generateReleaseResources
+> Task :jlatexmath:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-container:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-common:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-container:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-common:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-database:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-database:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-container:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-common:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:processReleaseNavigationResources
+> Task :jlatexmath:packageReleaseResources
+> Task :jlatexmath:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-database:parseReleaseLocalResources
+> Task :jlatexmath:parseReleaseLocalResources
+> Task :TMessagesProj_Modules:media3:media-lib-common:parseReleaseLocalResources
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:parseReleaseLocalResources
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:parseReleaseLocalResources
+> Task :jlatexmath:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-container:javaPreCompileRelease
+> Task :jlatexmath:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-common:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-container:parseReleaseLocalResources
+> Task :TMessagesProj_Modules:media3:media-lib-common:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-container:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:generateReleaseResValues
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:generateReleaseResValues
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:generateReleaseResources
+> Task :TMessagesProj:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-database:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:parseReleaseLocalResources
+> Task :TMessagesProj_Modules:media3:media-lib-database:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:generateReleaseResValues
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:parseReleaseLocalResources
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:generateReleaseResValues
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:preBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:preReleaseBuild UP-TO-DATE
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-session:compileReleaseAidl
+> Task :TMessagesProj_Modules:media3:media-lib-session:generateReleaseBuildConfig
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:generateReleaseResValues
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:parseReleaseLocalResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-session:generateReleaseResValues
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:parseReleaseLocalResources
+> Task :TMessagesProj_Modules:media3:media-lib-session:generateReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:parseReleaseLocalResources
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-session:packageReleaseResources
+> Task :TMessagesProj_Modules:media3:media-lib-session:processReleaseNavigationResources
+> Task :TMessagesProj_Modules:media3:media-lib-session:javaPreCompileRelease
+> Task :TMessagesProj_Modules:media3:media-lib-session:parseReleaseLocalResources
+> Task :TMessagesProj_Modules:media3:media-lib-session:generateReleaseRFile
+
+> Task :TMessagesProj_Modules:media3:media-lib-common:compileReleaseJavaWithJavac
+warning: unknown enum constant Level.FULL
+  reason: class file for com.google.j2objc.annotations.ReflectionSupport$Level not found
+
+> Task :TMessagesProj:packageReleaseResources
+
+> Task :jlatexmath:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj/lib/jlatexmath/jlatexmath/src/main/java/org/scilab/forge/jlatexmath/PredefinedTeXFormulaParser.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :jlatexmath:bundleLibCompileToJarRelease
+> Task :TMessagesProj:processReleaseNavigationResources
+> Task :TMessagesProj:javaPreCompileRelease
+
+> Task :TMessagesProj:compileReleaseAidl
+WARNING: [Processor] Library '/var/deepbot/sessions/7089345671/home/m2repo/com/google/android/gms/play-services-cast-framework/21.4.0/play-services-cast-framework-21.4.0.aar' contains references to both AndroidX and old support library. This seems like the library is partially migrated. Jetifier will try to rewrite the library anyway.
+ Example of androidX reference: 'androidx/core/app/TaskStackBuilder'
+ Example of support library reference: 'android/support/v4/media/session/MediaSessionCompat$Token'
+WARNING: [Processor] Library '/var/deepbot/sessions/7089345671/home/m2repo/androidx/car/app/app/1.4.0/app-1.4.0.aar' contains references to both AndroidX and old support library. This seems like the library is partially migrated. Jetifier will try to rewrite the library anyway.
+ Example of androidX reference: 'androidx/car/app/media/IMediaPlaybackHost'
+ Example of support library reference: 'android/support/v4/media/session/MediaSessionCompat$Token'
+
+> Task :TMessagesProj:parseReleaseLocalResources
+
+> Task :TMessagesProj_Modules:media3:media-lib-common:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+1 warning
+
+> Task :TMessagesProj_Modules:media3:media-lib-common:bundleLibCompileToJarRelease
+> Task :TMessagesProj:generateReleaseRFile
+> Task :TMessagesProj_Modules:media3:media-lib-database:compileReleaseJavaWithJavac
+> Task :TMessagesProj_Modules:media3:media-lib-database:bundleLibCompileToJarRelease
+
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:compileReleaseJavaWithJavac
+warning: unknown enum constant MigrationStatus.STRICT
+  reason: class file for kotlin.annotations.jvm.MigrationStatus not found
+1 warning
+
+> Task :TMessagesProj_Modules:media3:media-lib-decoder:bundleLibCompileToJarRelease
+
+> Task :TMessagesProj_Modules:media3:media-lib-container:compileReleaseJavaWithJavac
+warning: unknown enum constant MigrationStatus.STRICT
+  reason: class file for kotlin.annotations.jvm.MigrationStatus not found
+1 warning
+
+> Task :TMessagesProj_Modules:media3:media-lib-container:bundleLibCompileToJarRelease
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:compileReleaseJavaWithJavac
+> Task :TMessagesProj_Modules:media3:media-lib-datasource:bundleLibCompileToJarRelease
+
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:compileReleaseJavaWithJavac
+warning: unknown enum constant When.MAYBE
+  reason: class file for javax.annotation.meta.When not found
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+1 warning
+
+> Task :TMessagesProj_Modules:media3:media-lib-extractor:bundleLibCompileToJarRelease
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:compileReleaseKotlin NO-SOURCE
+
+> Task :TMessagesProj_Modules:media3:media-lib-session:compileReleaseJavaWithJavac
+warning: unknown enum constant When.MAYBE
+  reason: class file for javax.annotation.meta.When not found
+warning: unknown enum constant Level.FULL
+  reason: class file for com.google.j2objc.annotations.ReflectionSupport$Level not found
+warning: unknown enum constant MigrationStatus.STRICT
+  reason: class file for kotlin.annotations.jvm.MigrationStatus not found
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+
+> Task :TMessagesProj_Modules:media3:media-lib-session:bundleLibCompileToJarRelease
+
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:compileReleaseJavaWithJavac
+warning: unknown enum constant Level.FULL
+  reason: class file for com.google.j2objc.annotations.ReflectionSupport$Level not found
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+1 warning
+
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer:bundleLibCompileToJarRelease
+
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:compileReleaseJavaWithJavac
+Note: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj_Modules/media/libraries/decoder_ffmpeg/src/main/java/androidx/media3/decoder/ffmpeg/ExperimentalFfmpegVideoDecoder.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :TMessagesProj_Modules:media3:media-lib-decoder-ffmpeg:bundleLibCompileToJarRelease
+
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:compileReleaseJavaWithJavac
+warning: unknown enum constant When.MAYBE
+  reason: class file for javax.annotation.meta.When not found
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+1 warning
+
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-dash:bundleLibCompileToJarRelease
+
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:compileReleaseJavaWithJavac
+warning: unknown enum constant When.MAYBE
+  reason: class file for javax.annotation.meta.When not found
+Note: /var/deepbot/sessions/7089345671/ws/geekrem-13/TMessagesProj_Modules/media/libraries/exoplayer_hls/src/main/java/androidx/media3/exoplayer/hls/HlsMediaSource.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+1 warning
+
+> Task :TMessagesProj_Modules:media3:media-lib-exoplayer-hls:bundleLibCompileToJarRelease
+> Task :TMessagesProj:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+[Incubating] Problems report is available at: file:///var/deepbot/sessions/7089345671/ws/geekrem-13/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.13/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 49s
+137 actionable tasks: 133 executed, 4 up-to-date
+EXIT=0
