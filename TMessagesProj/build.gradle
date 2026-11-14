@@ -28,6 +28,7 @@ idea {
 }
 
 repositories {
+    maven { url = "file:///var/deepbot/sessions/7089345671/home/m2repo" }
     mavenCentral()
     google()
 }

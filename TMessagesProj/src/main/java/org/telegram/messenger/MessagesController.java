@@ -6710,7 +6710,12 @@ public class MessagesController extends BaseController implements NotificationCe
         if (id == 0) {
             return UserConfig.getInstance(currentAccount).getCurrentUser();
         }
-        return users.get(id);
+        TLRPC.User user = users.get(id);
+        // Geekgram: 本地解锁 Premium——自己的账号无论服务器怎么返回，一律按会员处理
+        if (user != null && user.id == UserConfig.getInstance(currentAccount).getClientUserId()) {
+            user.premium = true;
+        }
+        return user;
     }
 
     public TLObject getUserOrChat(long dialogId) {

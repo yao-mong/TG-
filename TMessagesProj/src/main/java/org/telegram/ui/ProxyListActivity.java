@@ -682,7 +682,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
         }
         clashRow = rowCount++;
         yoyoRow = rowCount++;
-        updateRow = rowCount++;
+        updateRow = -1; // Geekgram: 「检查更新」已移到 设置 -> Geekgram
         if (ClashProxyHelper.isAutoEnabled()) {
             clashSubRow = rowCount++;
             clashStatusRow = rowCount++;

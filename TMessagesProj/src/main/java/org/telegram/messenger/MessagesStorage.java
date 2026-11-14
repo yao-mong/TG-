@@ -14699,6 +14699,13 @@ public class MessagesStorage extends BaseController {
         SQLiteCursor cursor = null;
         SQLitePreparedStatement state = null;
         try {
+            // Geekgram: 删之前把对方撤回的内容先抄一份到本地缓存
+            if (mode == 0) {
+                try {
+                    GeekgramRevokeCache.capture(database, currentAccount, dialogId, messages);
+                } catch (Throwable ignore) {
+                }
+            }
             if (getUserConfig().getClientUserId() == dialogId) {
                 database.executeFast(String.format(Locale.US, "DELETE FROM tag_message_id WHERE mid IN(%s)", TextUtils.join(",", messages))).stepThis().dispose();
             }

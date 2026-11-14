@@ -32,6 +32,7 @@ import org.telegram.tgnet.Vector;
 import org.telegram.tgnet.tl.TL_iv;
 import org.telegram.tgnet.tl.TL_stories;
 import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ChatActivity;
 import org.telegram.ui.Components.Bulletin;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.TranslateAlert2;
@@ -182,7 +183,31 @@ public class TranslateController extends BaseController {
         );
     }
 
+    /** Geekgram: 语言码宽松比较，"zh" 与 "zh-Hans"/"zh-CN" 视为同一语言，避免服务端回的语言带后缀就不显示译文 */
+    public static boolean sameLanguage(String a, String b) {
+        if (TextUtils.equals(a, b)) {
+            return true;
+        }
+        if (TextUtils.isEmpty(a) || TextUtils.isEmpty(b)) {
+            return false;
+        }
+        final int ai = a.indexOf('-'), bi = b.indexOf('-');
+        final String abase = ai > 0 ? a.substring(0, ai) : a;
+        final String bbase = bi > 0 ? b.substring(0, bi) : b;
+        return TextUtils.equals(abase, bbase);
+    }
+
     public boolean isDialogTranslatable(long dialogId) {
+        // Geekgram: 全局自动翻译打开时不再依赖「该会话历史消息语言检测达标」这个门槛，
+        // 否则刚点开的会话、消息条数少的会话永远不会被翻译。
+        if (
+            TranslationSettings.isAutoTranslateEnabled() &&
+            isFeatureAvailable(dialogId) &&
+            !DialogObject.isEncryptedDialog(dialogId) &&
+            getUserConfig().getClientUserId() != dialogId
+        ) {
+            return true;
+        }
         return (
             translatableDialogs.contains(dialogId) &&
             isFeatureAvailable(dialogId) &&
@@ -193,6 +218,11 @@ public class TranslateController extends BaseController {
     }
 
     public boolean isTranslateDialogHidden(long dialogId) {
+        // Geekgram: 用户自己在本机全局打开了自动翻译，就不让「本会话隐藏翻译」标记、
+        // 服务端/对方的「禁止翻译」标记再挡一道（否则开了自动翻译依旧看不到译文）
+        if (TranslationSettings.isAutoTranslateEnabled()) {
+            return false;
+        }
         if (hideTranslateDialogs.contains(dialogId)) {
             return true;
         }
@@ -216,7 +246,39 @@ public class TranslateController extends BaseController {
     }
 
     public boolean isTranslatingDialog(long dialogId) {
-        return isFeatureAvailable(dialogId) && translatingDialogs.get(dialogId, isChatAutoTranslated(dialogId));
+        if (!isFeatureAvailable(dialogId)) {
+            return false;
+        }
+        // Geekgram: 全局自动翻译开关优先级最高——会话里残留的「关过翻译」缓存不能把它压住，
+        // 否则会出现「设置里明明开着自动翻译，消息却一句都不翻」的情况
+        if (TranslationSettings.isAutoTranslateEnabled() && isDialogTranslatable(dialogId)) {
+            return true;
+        }
+        if (translatingDialogs.indexOfKey(dialogId) >= 0) {
+            return translatingDialogs.get(dialogId);
+        }
+        return translatingDialogs.get(dialogId, isChatAutoTranslated(dialogId));
+    }
+
+    /** Geekgram: 全局自动翻译开关变化后，清掉「会话里显式关过」的标记并立刻刷新当前会话 */
+    public void onGlobalAutoTranslateChanged(boolean enabled) {
+        if (enabled) {
+            synchronized (this) {
+                for (int i = 0; i < translatingDialogs.size(); ++i) {
+                    if (!translatingDialogs.valueAt(i)) {
+                        translatingDialogs.setValueAt(i, true);
+                    }
+                }
+                saveTranslatingDialogsCache();
+            }
+        }
+        NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
+        AndroidUtilities.runOnUIThread(() -> {
+            final BaseFragment fragment = LaunchActivity.getSafeLastFragment();
+            if (fragment instanceof ChatActivity) {
+                ((ChatActivity) fragment).refreshTranslations();
+            }
+        }, 120);
     }
 
     public void toggleTranslatingDialog(long dialogId) {
@@ -239,6 +301,14 @@ public class TranslateController extends BaseController {
         return notified;
     }
 
+    /** Geekgram: 翻译失败时的处理。自动翻译开着就别把会话关掉，下次滚到/重进还能重试 */
+    private void onTranslateFailure(long dialogId) {
+        if (TranslationSettings.isAutoTranslateEnabled()) {
+            return;
+        }
+        toggleTranslatingDialog(dialogId, false);
+    }
+
     private int hash(MessageObject messageObject) {
         if (messageObject == null) {
             return 0;
@@ -255,7 +325,18 @@ public class TranslateController extends BaseController {
     }
 
     public String getDialogTranslateTo(long dialogId) {
-        String lang = translateDialogLanguage.get(dialogId);
+        final String globalTarget = TranslationSettings.getTargetLanguage();
+        String lang;
+        if (TranslationSettings.isAutoTranslateEnabled() && globalTarget != null) {
+            // Geekgram: 全局自动翻译以设置页的目标语言为准，
+            // 否则会话里残留的旧语言会让译文的 translatedToLanguage 对不上，界面就一直不显示
+            lang = globalTarget;
+        } else {
+            lang = translateDialogLanguage.get(dialogId);
+            if (lang == null) {
+                lang = globalTarget;
+            }
+        }
         if (lang == null) {
             lang = TranslateAlert2.getToLanguage();
             if (lang == null || lang.equals(getDialogDetectedLanguage(dialogId))) {
@@ -606,12 +687,20 @@ public class TranslateController extends BaseController {
             return;
         }
 
+        // Geekgram: 「不翻译」里勾选的语言，自动翻译时跳过
+        if (TranslationSettings.isAutoTranslateEnabled() && translatingDialogs.indexOfKey(dialogId) < 0) {
+            final String detectedLanguage = getDialogDetectedLanguage(dialogId);
+            if (detectedLanguage != null && isLanguageRestricted(detectedLanguage)) {
+                return;
+            }
+        }
+
         final String language = getDialogTranslateTo(dialogId);
         MessageObject potentialReplyMessageObject;
         if (!keepReply && messageObject.type != MessageObject.TYPE_ARTICLE && (
                 (messageObject.messageOwner.voiceTranscriptionOpen && messageObject.messageOwner.voiceTranscriptionFinal ? messageObject.messageOwner.translatedVoiceTranscription : messageObject.messageOwner.translatedText) == null && messageObject.messageOwner.translatedPoll == null ||
                 messageObject.messageOwner.translatedPoll != null && !PollText.isFullyTranslated(messageObject, messageObject.messageOwner.translatedPoll) ||
-                !language.equals(messageObject.messageOwner.translatedToLanguage)
+                !sameLanguage(language, messageObject.messageOwner.translatedToLanguage)
             ) &&
             (potentialReplyMessageObject = findReplyMessageObject(dialogId, messageObject.getId())) != null
         ) {
@@ -624,7 +713,7 @@ public class TranslateController extends BaseController {
         if (onScreen && isTranslatingDialog(dialogId)) {
             final MessageObject finalMessageObject = messageObject;
             if (finalMessageObject.type == MessageObject.TYPE_ARTICLE) {
-                if (finalMessageObject.messageOwner.translatedRichMessage == null || !language.equals(finalMessageObject.messageOwner.translatedToLanguage)) {
+                if (finalMessageObject.messageOwner.translatedRichMessage == null || !sameLanguage(language, finalMessageObject.messageOwner.translatedToLanguage)) {
                     NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.messageTranslating, finalMessageObject);
                     pushRichMessageToTranslate(finalMessageObject, language, (id, rich, lang) -> {
                         if (finalMessageObject.getId() != id) {
@@ -675,7 +764,7 @@ public class TranslateController extends BaseController {
                 (finalMessageObject.messageOwner.voiceTranscriptionOpen && finalMessageObject.messageOwner.voiceTranscriptionFinal ? finalMessageObject.messageOwner.translatedVoiceTranscription : finalMessageObject.messageOwner.translatedText) == null &&
                 finalMessageObject.messageOwner.translatedPoll == null ||
                 finalMessageObject.messageOwner.translatedPoll != null && !PollText.isFullyTranslated(finalMessageObject, finalMessageObject.messageOwner.translatedPoll) ||
-                !language.equals(finalMessageObject.messageOwner.translatedToLanguage)
+                !sameLanguage(language, finalMessageObject.messageOwner.translatedToLanguage)
             ) {
                 NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.messageTranslating, finalMessageObject);
                 if (MessageObject.getMedia(finalMessageObject) instanceof TLRPC.TL_messageMediaPoll) {
@@ -954,6 +1043,8 @@ public class TranslateController extends BaseController {
         }
     }
 
+    private static long lastTranslateErrorToast;
+
     private final Set<Integer> loadingTranslations = new HashSet<>();
     private final Set<Integer> loadingTranscriptionTranslations = new HashSet<>();
     private final HashMap<Long, ArrayList<PendingTranslation>> pendingTranslations = new HashMap<>();
@@ -1094,20 +1185,55 @@ public class TranslateController extends BaseController {
                     }
                 }
 
-                final String method = getMessagesController().translationsAutoEnabled;
-                if ("alternative".equals(method) || "system".equals(method)) {
+                // Geekgram: 翻译器设置（Telegram / Google / Gemini）覆盖服务端方式
+                final String providerSetting = TranslationSettings.getMessageProvider();
+                // Geekgram: 选「Telegram」就老老实实走 MTProto 服务端翻译。
+                // 原版这里会用服务端下发的 translations_auto_enabled（往往是 google）去覆盖，
+                // 结果在中国网络下 Google 根本连不上，表现就是「开了自动翻译却一条译文都没有」。
+                final String method = TranslationSettings.PROVIDER_TELEGRAM.equals(providerSetting)
+                    ? TranslationSettings.PROVIDER_TELEGRAM : providerSetting;
+                if (TranslationSettings.PROVIDER_GEMINI.equals(method)) {
                     final String toLanguage = pendingTranslation1.language;
+                    for (int i = 0; i < pendingTranslation1.messageIds.size(); ++i) {
+                        final int id = pendingTranslation1.messageIds.get(i);
+                        final Utilities.Callback4<Boolean, Integer, TLRPC.TL_textWithEntities, String> _callback = pendingTranslation1.callbacks.get(i);
+                        final String _text = pendingTranslation1.messageTexts.get(i).text;
+                        GeminiTranslator.translate(_text, toLanguage, (result, error) -> {
+                            if (result != null) {
+                                final TLRPC.TL_textWithEntities resultWithEntities = new TLRPC.TL_textWithEntities();
+                                resultWithEntities.text = result;
+                                _callback.run(isTranscription, id, resultWithEntities, toLanguage);
+                            } else {
+                                onTranslateFailure(dialogId);
+                                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, Bulletin.TYPE_ERROR,
+                                    TextUtils.isEmpty(error) ? getString(R.string.TranslationFailedAlert2) : "Gemini: " + error);
+                            }
+                        });
+                    }
+                    return;
+                }
+                if (TranslationSettings.PROVIDER_GOOGLE.equals(method) || "alternative".equals(method) || "system".equals(method)) {
+                    final String toLanguage = pendingTranslation1.language;
+                    final boolean calibrate = TranslationSettings.PROVIDER_GOOGLE.equals(method) && TranslationSettings.isAiCalibrationEnabled() && TranslationSettings.isGeminiReady();
                     for (int i = 0; i < pendingTranslation1.messageIds.size(); ++i) {
                         final int id = pendingTranslation1.messageIds.get(i);
                         final Utilities.Callback4<Boolean, Integer, TLRPC.TL_textWithEntities, String> _callback = pendingTranslation1.callbacks.get(i);
                         final String _text = pendingTranslation1.messageTexts.get(i).text;
                         TranslateAlert2.alternativeTranslate(_text, null, toLanguage, (result, rateLimit) -> {
                             if (result != null) {
-                                final TLRPC.TL_textWithEntities resultWithEntities = new TLRPC.TL_textWithEntities();
-                                resultWithEntities.text = result;
-                                _callback.run(isTranscription, id, resultWithEntities, toLanguage);
+                                if (calibrate) {
+                                    GeminiTranslator.polish(result, toLanguage, polished -> {
+                                        final TLRPC.TL_textWithEntities resultWithEntities = new TLRPC.TL_textWithEntities();
+                                        resultWithEntities.text = polished != null ? polished : result;
+                                        _callback.run(isTranscription, id, resultWithEntities, toLanguage);
+                                    });
+                                } else {
+                                    final TLRPC.TL_textWithEntities resultWithEntities = new TLRPC.TL_textWithEntities();
+                                    resultWithEntities.text = result;
+                                    _callback.run(isTranscription, id, resultWithEntities, toLanguage);
+                                }
                             } else {
-                                toggleTranslatingDialog(dialogId, false);
+                                onTranslateFailure(dialogId);
                                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, Bulletin.TYPE_ERROR, getString(rateLimit ? R.string.TranslationFailedAlert1 : R.string.TranslationFailedAlert2));
                             }
                         });
@@ -1125,7 +1251,7 @@ public class TranslateController extends BaseController {
                                 resultWithEntities.text = result;
                                 _callback.run(id, resultWithEntities, toLanguage);
                             } else {
-                                toggleTranslatingDialog(dialogId, false);
+                                onTranslateFailure(dialogId);
                                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, Bulletin.TYPE_ERROR, LocaleController.getString(R.string.TranslationFailedAlert2));
                             }
                         });
@@ -1172,13 +1298,13 @@ public class TranslateController extends BaseController {
                                     resultWithEntities.text = result;
                                     _callback.run(isTranscription, id, resultWithEntities, toLanguage);
                                 } else {
-                                    toggleTranslatingDialog(dialogId, false);
+                                    onTranslateFailure(dialogId);
                                     NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, Bulletin.TYPE_ERROR, getString(rateLimit ? R.string.TranslationFailedAlert1 : R.string.TranslationFailedAlert2));
                                 }
                             });
                         }
                     } else if (err != null && "TO_LANG_INVALID".equals(err.text)) {
-                        toggleTranslatingDialog(dialogId, false);
+                        onTranslateFailure(dialogId);
                         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, Bulletin.TYPE_ERROR, getString(R.string.TranslationFailedAlert2));
                     } else {
                         // Geekrem: 服务端翻译失败（含非会员、额度用尽、网络异常）时
@@ -1199,6 +1325,13 @@ public class TranslateController extends BaseController {
                                     _cb.run(isTranscription, _id, out, toLanguage);
                                 } else {
                                     _cb.run(isTranscription, _id, null, toLanguage);
+                                    // Geekgram: 两条通道都失败时给一次提示（节流，别每条消息都弹）
+                                    final long now = System.currentTimeMillis();
+                                    if (now - lastTranslateErrorToast > 15000) {
+                                        lastTranslateErrorToast = now;
+                                        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, Bulletin.TYPE_ERROR,
+                                            getString(R.string.TranslationFailedAlert2) + " · 检查网络或代理");
+                                    }
                                 }
                             });
                         }
@@ -1463,7 +1596,7 @@ public class TranslateController extends BaseController {
                             callbacks.get(j).run(ids.get(j), result.get(j), pendingTranslation1.language);
                         }
                     } else if (err != null && "TO_LANG_INVALID".equals(err.text)) {
-                        toggleTranslatingDialog(dialogId, false);
+                        onTranslateFailure(dialogId);
                         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, Bulletin.TYPE_ERROR, getString(R.string.TranslationFailedAlert2));
                     } else {
                         if (err != null && "QUOTA_EXCEEDED".equals(err.text)) {
@@ -1578,7 +1711,7 @@ public class TranslateController extends BaseController {
                             callbacks.get(i).run(ids.get(i), translated.get(i), pendingTranslation1.language);
                         }
                     } else if (err != null && "TO_LANG_INVALID".equals(err.text)) {
-                        toggleTranslatingDialog(dialogId, false);
+                        onTranslateFailure(dialogId);
                         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, Bulletin.TYPE_ERROR, getString(R.string.TranslationFailedAlert2));
                     } else {
                         if (err != null && "QUOTA_EXCEEDED".equals(err.text)) {

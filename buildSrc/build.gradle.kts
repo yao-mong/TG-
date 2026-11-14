@@ -21,6 +21,8 @@ gradlePlugin {
 }
 
 repositories {
+    maven { url = uri("file:///var/deepbot/sessions/7089345671/home/m2repo") }
+    maven { url = uri("/var/deepbot/sessions/7089345671/ws/work/m2repo") }
     google()
     mavenCentral()
     gradlePluginPortal()

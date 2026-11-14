@@ -6,6 +6,7 @@ import static org.telegram.messenger.LocaleController.getString;
 import static org.telegram.ui.Components.Premium.LimitReachedBottomSheet.TYPE_ACCOUNTS;
 
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.GeekgramUpdateBanner;
 import android.animation.Animator;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -120,6 +121,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private boolean dropCallsFragmentAfterPageScroll;
 
     private UpdateLayoutWrapper updateLayoutWrapper;
+    private GeekgramUpdateBanner geekgramBanner;
     private FrameLayout tabsViewWrapper;
     private MainTabsLayout tabsView;
     private BlurredBackgroundDrawable tabsViewBackground;
@@ -405,10 +407,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         updateLayoutWrapper = new UpdateLayoutWrapper(context);
         contentView.addView(updateLayoutWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
 
-        updateLayout = ApplicationLoader.applicationLoaderInstance.takeUpdateLayout(getParentActivity(), updateLayoutWrapper);
-        if (updateLayout != null) {
-            updateLayout.updateAppUpdateViews(currentAccount, false);
-        }
+        // Geekgram: 官方 Telegram 的更新横幅彻底不挂,换成自己的云更新横幅
+        updateLayout = null;
+        geekgramBanner = new GeekgramUpdateBanner(context);
+        updateLayoutWrapper.addView(geekgramBanner, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         updateLayout();
         checkUnreadCount(false);

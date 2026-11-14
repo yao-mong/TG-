@@ -15279,12 +15279,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private CharSequence postProcessTranslated(MessageObject messageObject) {
-        if (messageObject == null || messageObject.messageOwner == null) {
+        if (messageObject == null || messageObject.messageOwner == null || messageObject.messageOwner.translatedText == null) {
             return "";
         }
+        final ArrayList<TLRPC.MessageEntity> translatedEntities = messageObject.messageOwner.translatedText.entities == null ? new ArrayList<>() : messageObject.messageOwner.translatedText.entities;
         CharSequence message = new SpannableStringBuilder(messageObject.messageOwner.translatedText.text);
         message = Emoji.replaceEmoji(message, Theme.chat_msgTextPaint.getFontMetricsInt(), false);
-        message = MessageObject.replaceAnimatedEmoji(message, messageObject.messageOwner.translatedText.entities, Theme.chat_msgTextPaint.getFontMetricsInt(), false);
+        message = MessageObject.replaceAnimatedEmoji(message, translatedEntities, Theme.chat_msgTextPaint.getFontMetricsInt(), false);
         if (MessageObject.containsUrls(message)) {
             try {
                 AndroidUtilities.addLinksSafe((Spannable) message, Linkify.WEB_URLS | Linkify.PHONE_NUMBERS, false, true);
@@ -15293,7 +15294,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             }
         }
         MessageObject.addUrlsByPattern(messageObject.isOutOwner(), message, true, 0, 0, true);
-        MessageObject.addEntitiesToText(message, messageObject.messageOwner.translatedText.entities, messageObject.isOutOwner(), true, true, true);
+        MessageObject.addEntitiesToText(message, translatedEntities, messageObject.isOutOwner(), true, true, true);
         if (messageObject.isVideo()) {
             MessageObject.addUrlsByPattern(messageObject.isOutOwner(), message, true, 3, (int) messageObject.getDuration(), false);
         } else if (messageObject.isMusic() || messageObject.isVoice()) {

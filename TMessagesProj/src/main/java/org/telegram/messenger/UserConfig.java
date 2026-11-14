@@ -255,6 +255,10 @@ public class UserConfig extends BaseController {
 
     public TLRPC.User getCurrentUser() {
         synchronized (sync) {
+            // Geekgram: 本地解锁 Telegram Premium——所有读当前用户的路径都拿到 premium=true
+            if (currentUser != null) {
+                currentUser.premium = true;
+            }
             return currentUser;
         }
     }
@@ -262,6 +266,10 @@ public class UserConfig extends BaseController {
     public void setCurrentUser(TLRPC.User user) {
         synchronized (sync) {
             TLRPC.User oldUser = currentUser;
+            // Geekgram: 本地解锁 Premium——自己账号固定为会员
+            if (user != null) {
+                user.premium = true;
+            }
             currentUser = user;
             clientUserId = user.id;
             checkPremiumSelf(oldUser, user);
@@ -573,11 +581,8 @@ public class UserConfig extends BaseController {
     }
 
     public boolean isPremium() {
-        TLRPC.User user = currentUser;
-        if (user == null) {
-            return false;
-        }
-        return user.premium;
+        // Geekgram: 本地解锁 Telegram Premium（客户端侧门禁全开，服务端特权类功能仍以服务器返回为准）
+        return true;
     }
 
     public Long getEmojiStatus() {

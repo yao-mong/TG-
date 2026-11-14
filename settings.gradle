@@ -9,6 +9,7 @@ project(':jlatexmath').projectDir = file('TMessagesProj/lib/jlatexmath/jlatexmat
 
 dependencyResolutionManagement {
     repositories {
+        maven { url 'file:///var/deepbot/sessions/7089345671/home/m2repo' }
         google()
         mavenCentral()
     }

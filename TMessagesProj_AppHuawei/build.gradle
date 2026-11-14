@@ -3,6 +3,7 @@ apply plugin: 'com.huawei.agconnect'
 apply plugin: 'org.telegram.build-app-plugin'
 
 repositories {
+    maven { url = "file:///var/deepbot/sessions/7089345671/home/m2repo" }
     mavenCentral()
     google()
     maven { url 'https://developer.huawei.com/repo/' }

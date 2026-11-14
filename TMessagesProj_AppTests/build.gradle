@@ -1,6 +1,7 @@
 // Kotlin is needed only by this module's existing instrumentation tests.
 buildscript {
     repositories {
+    maven { url = "file:///var/deepbot/sessions/7089345671/home/m2repo" }
         google()
         mavenCentral()
     }
@@ -15,6 +16,7 @@ apply plugin: 'test-generator'
 apply plugin: 'org.telegram.build-app-plugin'
 
 repositories {
+    maven { url = "file:///var/deepbot/sessions/7089345671/home/m2repo" }
     mavenCentral()
     google()
 }
