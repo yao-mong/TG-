@@ -255,9 +255,9 @@ public class UserConfig extends BaseController {
 
     public TLRPC.User getCurrentUser() {
         synchronized (sync) {
-            // Geekgram: 本地解锁 Telegram Premium——所有读当前用户的路径都拿到 premium=true
+            // Geekgram: 本地会员开关——开着就当会员，关掉就按服务器回来的一样
             if (currentUser != null) {
-                currentUser.premium = true;
+                currentUser.premium = isLocalPremiumEnabled();
             }
             return currentUser;
         }
@@ -266,9 +266,9 @@ public class UserConfig extends BaseController {
     public void setCurrentUser(TLRPC.User user) {
         synchronized (sync) {
             TLRPC.User oldUser = currentUser;
-            // Geekgram: 本地解锁 Premium——自己账号固定为会员
+            // Geekgram: 本地会员开关
             if (user != null) {
-                user.premium = true;
+                user.premium = isLocalPremiumEnabled();
             }
             currentUser = user;
             clientUserId = user.id;
@@ -581,8 +581,45 @@ public class UserConfig extends BaseController {
     }
 
     public boolean isPremium() {
-        // Geekgram: 本地解锁 Telegram Premium（客户端侧门禁全开，服务端特权类功能仍以服务器返回为准）
-        return true;
+        // Geekgram: 本地会员开关（客户端侧门禁全开/关闭，服务端特权类功能仍以服务器返回为准）
+        return isLocalPremiumEnabled();
+    }
+
+    /** Geekgram: 本地会员开关，默认开着 */
+    public static boolean isLocalPremiumEnabled() {
+        try {
+            return MessagesController.getGlobalMainSettings().getBoolean("geekgram_local_premium", true);
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    /** Geekgram: 切换本地会员开关，切完立即刷新各账号的会员状态 */
+    public static void setLocalPremiumEnabled(boolean enabled) {
+        try {
+            MessagesController.getGlobalMainSettings().edit().putBoolean("geekgram_local_premium", enabled).commit();
+        } catch (Throwable ignore) {
+        }
+        AndroidUtilities.runOnUIThread(() -> {
+            for (int a = 0; a < MAX_ACCOUNT_COUNT; a++) {
+                UserConfig config = UserConfig.getInstance(a);
+                if (!config.isClientActivated()) {
+                    continue;
+                }
+                synchronized (config.sync) {
+                    if (config.currentUser != null) {
+                        config.currentUser.premium = enabled;
+                    }
+                }
+                try {
+                    MessagesController.getInstance(a).updatePremium(enabled);
+                } catch (Throwable ignore) {
+                }
+                NotificationCenter.getInstance(a).postNotificationName(NotificationCenter.currentUserPremiumStatusChanged);
+            }
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.premiumStatusChangedGlobal);
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.dialogsNeedReload);
+        });
     }
 
     public Long getEmojiStatus() {

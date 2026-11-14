@@ -222,6 +222,14 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name="org.telegram.ui.ProxyNodeActivity"
+            android:theme="@style/Theme.TMessages"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:hardwareAccelerated="true"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name="org.telegram.ui.GeekgramSettingsActivity"
             android:theme="@style/Theme.TMessages"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"

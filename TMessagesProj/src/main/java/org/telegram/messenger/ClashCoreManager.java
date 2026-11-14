@@ -59,6 +59,13 @@ public class ClashCoreManager {
     private static volatile String lastError = "";
     private static volatile String lastNote = "";
 
+    /** 连接守护：端口一断就自动把内核拉回来，不用用户手动点 */
+    private static volatile Thread watchdog;
+    private static volatile boolean watching = false;
+    private static volatile int restartCount = 0;
+    /** 当前线路名（PROXY 指向谁），给界面显示用，后台线程刷新 */
+    private static volatile String selectionCache = "";
+
     public interface Callback {
         void onResult(boolean ok, String error);
     }
@@ -448,6 +455,7 @@ public class ClashCoreManager {
                         running = true;
                         lastError = "";
                         ClashProxyHelper.applyPort(MIXED_PORT, true);
+                        startWatchdog();
                     }
                     if (callback != null) {
                         callback.onResult(fok, ferr);
@@ -458,6 +466,7 @@ public class ClashCoreManager {
     }
 
     public static void stop() {
+        stopWatchdog();
         running = false;
         Process p = process;
         process = null;
@@ -503,6 +512,132 @@ public class ClashCoreManager {
     }
 
     // ------------------------------------------------------------ 内部实现
+
+    // ------------------------------------------------------------ 连接守护
+
+    /**
+     * 内核起来以后每 8 秒看一眼：端口还在就顺手确认 Telegram 这边的代理没被关掉；
+     * 端口没了（内核被系统杀了 / 自己退了）就静默拉起来，用户不用管。
+     */
+    private static void startWatchdog() {
+        if (watching) {
+            return;
+        }
+        watching = true;
+        Thread t = new Thread("geekgram-clash-watch") {
+            @Override
+            public void run() {
+                refreshSelectionCache();
+                while (watching) {
+                    try {
+                        Thread.sleep(8000);
+                    } catch (InterruptedException ignore) {
+                        break;
+                    }
+                    if (!watching) {
+                        break;
+                    }
+                    if (probeQuiet()) {
+                        restartCount = 0;
+                        ensureProxyApplied();
+                        refreshSelectionCache();
+                        continue;
+                    }
+                    if (busy) {
+                        continue; // 正在启动中，别插一脚
+                    }
+                    if (restartCount >= 5) {
+                        // 连着起不来就别死循环了，歇一分钟再试
+                        try {
+                            Thread.sleep(52000);
+                        } catch (InterruptedException ignore) {
+                            break;
+                        }
+                        if (!watching) {
+                            break;
+                        }
+                        restartCount = 0;
+                    }
+                    restartCount++;
+                    try {
+                        writeConfig();
+                        launch();
+                        if (waitPort(20000)) {
+                            running = true;
+                            lastError = "";
+                            ensureProxyApplied();
+                        } else {
+                            lastError = "内核退出了，正在重连";
+                        }
+                    } catch (Throwable t2) {
+                        lastError = shortReason(t2);
+                    }
+                }
+            }
+        };
+        watchdog = t;
+        t.start();
+    }
+
+    /** 当前走的线路，界面直接读这个，不用等网络 */
+    public static String selectionText() {
+        return selectionCache;
+    }
+
+    private static void refreshSelectionCache() {
+        try {
+            org.json.JSONObject item = ClashApi.proxy("PROXY");
+            if (item != null) {
+                String now = item.optString("now", "");
+                if (now != null && now.length() > 0) {
+                    selectionCache = now;
+                }
+            }
+        } catch (Throwable ignore) {
+        }
+    }
+
+    private static void stopWatchdog() {
+        watching = false;
+        Thread t = watchdog;
+        watchdog = null;
+        if (t != null) {
+            try {
+                t.interrupt();
+            } catch (Throwable ignore) {
+            }
+        }
+    }
+
+    /** 端口是通的，但 Telegram 那边代理被关掉或者指到别处了，补回去 */
+    private static void ensureProxyApplied() {
+        try {
+            if (!ClashProxyHelper.isAutoEnabled()) {
+                return;
+            }
+            boolean enabled = MessagesController.getGlobalMainSettings().getBoolean("proxy_enabled", false);
+            if (enabled && ClashProxyHelper.detectedPort == MIXED_PORT) {
+                return;
+            }
+            AndroidUtilities.runOnUIThread(() -> ClashProxyHelper.applyPort(MIXED_PORT, false));
+        } catch (Throwable ignore) {
+        }
+    }
+
+    private static boolean probeQuiet() {
+        Socket socket = new Socket();
+        try {
+            socket.connect(new InetSocketAddress("127.0.0.1", MIXED_PORT), 300);
+            return true;
+        } catch (Throwable t) {
+            return false;
+        } finally {
+            try {
+                socket.close();
+            } catch (Throwable ignore) {
+            }
+        }
+    }
 
     private static String shortReason(Throwable t) {
         String m = t == null ? "" : t.getMessage();
@@ -638,51 +773,92 @@ public class ClashCoreManager {
         }
     }
 
+    /** 分组定义：组名 + 匹配节点的正则（对应节点名里的地区字样） */
+    private static final String[][] REGION_GROUPS = {
+            {"香港节点", "(?i)香港|hongkong|hong.kong|(^|[^a-z])hk([^a-z]|$)"},
+            {"台湾节点", "(?i)台湾|臺灣|taiwan|(^|[^a-z])tw([^a-z]|$)|台北"},
+            {"狮城节点", "(?i)新加坡|狮城|獅城|singapore|(^|[^a-z])sg([^a-z]|$)"},
+            {"日本节点", "(?i)日本|japan|(^|[^a-z])jp([^a-z]|$)|东京|東京|大阪"},
+            {"美国节点", "(?i)美国|美國|united states|usa|(^|[^a-z])us([^a-z]|$)|洛杉矶|圣何塞|西雅图|达拉斯|纽约|芝加哥"},
+            {"韩国节点", "(?i)韩国|韓國|korea|(^|[^a-z])kr([^a-z]|$)|首尔|首爾"},
+    };
+
     private static void writeConfig() throws Exception {
-        String yaml = ""
-                + "mixed-port: " + MIXED_PORT + "\n"
-                + "allow-lan: false\n"
-                + "bind-address: 127.0.0.1\n"
-                + "mode: rule\n"
-                + "log-level: warning\n"
-                + "ipv6: false\n"
-                + "unified-delay: true\n"
-                + "tcp-concurrent: true\n"
-                + "find-process-mode: off\n"
-                + "geodata-mode: false\n"
-                + "external-controller: ''\n"
-                + "profile:\n"
-                + "  store-selected: true\n"
-                + "  store-fake-ip: false\n"
-                + "dns:\n"
-                + "  enable: true\n"
-                + "  ipv6: false\n"
-                + "  default-nameserver:\n"
-                + "    - 223.5.5.5\n"
-                + "    - 119.29.29.29\n"
-                + "  nameserver:\n"
-                + "    - https://dns.alidns.com/dns-query\n"
-                + "    - https://sm2.doh.pub/dns-query\n"
-                + "    - 223.5.5.5\n"
-                + "proxy-providers:\n"
-                + "  geekgram_sub:\n"
-                + "    type: file\n"
-                + "    path: ./" + SUB_FILE + "\n"
-                + "    health-check:\n"
-                + "      enable: true\n"
-                + "      url: http://www.gstatic.com/generate_204\n"
-                + "      interval: 600\n"
-                + "proxy-groups:\n"
-                + "  - name: PROXY\n"
-                + "    type: url-test\n"
-                + "    use:\n"
-                + "      - geekgram_sub\n"
-                + "    url: http://www.gstatic.com/generate_204\n"
-                + "    interval: 1800\n"
-                + "    timeout: 4000\n"
-                + "    tolerance: 60\n"
-                + "rules:\n"
-                + "  - MATCH,PROXY\n";
+        StringBuilder sb = new StringBuilder();
+        sb.append("mixed-port: ").append(MIXED_PORT).append('\n');
+        sb.append("allow-lan: false\n");
+        sb.append("bind-address: 127.0.0.1\n");
+        sb.append("mode: rule\n");
+        sb.append("log-level: warning\n");
+        sb.append("ipv6: false\n");
+        sb.append("unified-delay: true\n");
+        sb.append("tcp-concurrent: true\n");
+        sb.append("find-process-mode: off\n");
+        sb.append("geodata-mode: false\n");
+        // 本机控制接口：节点选择 / 测延迟全靠它，只监听回环
+        sb.append("external-controller: 127.0.0.1:").append(ClashApi.API_PORT).append('\n');
+        sb.append("secret: ").append(ClashApi.SECRET).append('\n');
+        sb.append("profile:\n");
+        sb.append("  store-selected: true\n");
+        sb.append("  store-fake-ip: false\n");
+        sb.append("dns:\n");
+        sb.append("  enable: true\n");
+        sb.append("  ipv6: false\n");
+        sb.append("  default-nameserver:\n");
+        sb.append("    - 223.5.5.5\n");
+        sb.append("    - 119.29.29.29\n");
+        sb.append("  nameserver:\n");
+        sb.append("    - https://dns.alidns.com/dns-query\n");
+        sb.append("    - https://sm2.doh.pub/dns-query\n");
+        sb.append("    - 223.5.5.5\n");
+        sb.append("proxy-providers:\n");
+        sb.append("  geekgram_sub:\n");
+        sb.append("    type: file\n");
+        sb.append("    path: ./").append(SUB_FILE).append('\n');
+        sb.append("    health-check:\n");
+        sb.append("      enable: true\n");
+        sb.append("      url: http://www.gstatic.com/generate_204\n");
+        sb.append("      interval: 600\n");
+        sb.append("proxy-groups:\n");
+        // 总开关：规则走的都是它，用户选哪个组 / 哪个节点就等于切线路
+        sb.append("  - name: PROXY\n");
+        sb.append("    type: select\n");
+        sb.append("    proxies:\n");
+        sb.append("      - 自动选择\n");
+        sb.append("      - 手动切换\n");
+        for (String[] g : REGION_GROUPS) {
+            sb.append("      - ").append(g[0]).append('\n');
+        }
+        sb.append("      - DIRECT\n");
+        // 自动选择：一直在所有节点里挑最快的
+        sb.append("  - name: 自动选择\n");
+        sb.append("    type: url-test\n");
+        sb.append("    use:\n");
+        sb.append("      - geekgram_sub\n");
+        sb.append("    url: http://www.gstatic.com/generate_204\n");
+        sb.append("    interval: 300\n");
+        sb.append("    timeout: 4000\n");
+        sb.append("    tolerance: 50\n");
+        // 手动切换：列出订阅里全部节点，自己点
+        sb.append("  - name: 手动切换\n");
+        sb.append("    type: select\n");
+        sb.append("    use:\n");
+        sb.append("      - geekgram_sub\n");
+        // 地区分组：按节点名自动归类
+        for (String[] g : REGION_GROUPS) {
+            sb.append("  - name: ").append(g[0]).append('\n');
+            sb.append("    type: url-test\n");
+            sb.append("    use:\n");
+            sb.append("      - geekgram_sub\n");
+            sb.append("    filter: \"").append(g[1]).append("\"\n");
+            sb.append("    url: http://www.gstatic.com/generate_204\n");
+            sb.append("    interval: 300\n");
+            sb.append("    timeout: 4000\n");
+            sb.append("    tolerance: 50\n");
+        }
+        sb.append("rules:\n");
+        sb.append("  - MATCH,PROXY\n");
+        String yaml = sb.toString();
 
         File cfg = new File(dir(), CONFIG_FILE);
         FileOutputStream out = new FileOutputStream(cfg);

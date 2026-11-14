@@ -27,6 +27,8 @@ import android.widget.Toast;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.GeekgramRevokeCache;
 import org.telegram.messenger.GeekgramUpdateChecker;
+import org.telegram.messenger.ClashCoreManager;
+import org.telegram.messenger.UserConfig;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.Theme;
 
@@ -36,6 +38,8 @@ public class GeekgramSettingsActivity extends Activity {
     private TextView updateSub;
     private TextView revokeSub;
     private TextView recordSub;
+    private TextView premiumSub;
+    private TextView nodeSub;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -119,8 +123,25 @@ public class GeekgramSettingsActivity extends Activity {
         recordSub = new TextView(this);
         addRow("撤回记录", recordSub, v -> startActivity(new android.content.Intent(this, GeekgramRevokeActivity.class)));
 
+        premiumSub = new TextView(this);
+        addRow("本地会员（Premium）", premiumSub, v -> {
+            boolean next = !UserConfig.isLocalPremiumEnabled();
+            UserConfig.setLocalPremiumEnabled(next);
+            refreshSubtitles();
+            Toast.makeText(this, next ? "本地会员已开启" : "本地会员已关闭", Toast.LENGTH_SHORT).show();
+        });
+
+        nodeSub = new TextView(this);
+        addRow("节点选择", nodeSub, v -> {
+            try {
+                startActivity(new android.content.Intent(this, ProxyNodeActivity.class));
+            } catch (Throwable e) {
+                Toast.makeText(this, "打不开节点选择", Toast.LENGTH_SHORT).show();
+            }
+        });
+
         TextView note = new TextView(this);
-        note.setText("更新走固定的云更新服务器,官方 Telegram 更新通道已关闭。\n对方撤回消息时,原文会先存在本机,撤回了也能在「撤回记录」里翻看。");
+        note.setText("更新走固定的云更新服务器,官方 Telegram 更新通道已关闭。\n对方撤回消息时,原文会先存在本机,撤回了也能在「撤回记录」里翻看。\n本地会员只改本机显示,不改服务器上的真实订阅状态。");
         note.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         note.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
         note.setLineSpacing(dp(4), 1f);
@@ -138,6 +159,11 @@ public class GeekgramSettingsActivity extends Activity {
         int count = GeekgramRevokeCache.count();
         revokeSub.setText((on ? "已开启" : "已关闭") + " · 已缓存 " + count + " 条");
         recordSub.setText(count > 0 ? "共 " + count + " 条,点开查看" : "还没有记录");
+        premiumSub.setText(UserConfig.isLocalPremiumEnabled() ? "已开启 · 本地解锁各项会员功能" : "已关闭 · 按账号真实状态显示");
+        String sel = ClashCoreManager.selectionText();
+        nodeSub.setText(ClashCoreManager.isRunning()
+                ? ("内核运行中 · 当前 " + (TextUtils.isEmpty(sel) ? "自动选择" : sel))
+                : "自动选择 / 地区分组 / 手动切换");
     }
 
     private void checkUpdate() {
