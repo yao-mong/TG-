@@ -114,6 +114,8 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     private String actionModeTag;
     private boolean ignoreLayoutRequest;
     protected boolean occupyStatusBar = true;
+    // Geekgram: 顶栏和状态栏之间留的呼吸空间（dp），避免顶部文字紧贴状态栏
+    public static final int GEEKGRAM_STATUS_BAR_GAP_DP = 8;
     protected boolean actionModeVisible;
     private boolean addToContainer = true;
     private boolean clipContent;
@@ -530,7 +532,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         boolean clip = shouldClipChild(child);
         if (clip) {
             canvas.save();
-            canvas.clipRect(0, -getTranslationY() + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0), getMeasuredWidth(), getMeasuredHeight());
+            canvas.clipRect(0, -getTranslationY() + getStatusBarSpace(), getMeasuredWidth(), getMeasuredHeight());
         }
         boolean result = super.drawChild(canvas, child, drawingTime);
         if (supportsHolidayImage && !titleOverlayShown && !LocaleController.isRTL && (child == titleTextView[0] || child == titleTextView[1] || child == titlesContainer && useContainerForTitles)) {
@@ -1581,7 +1583,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         }
         ignoreLayoutRequest = false;
 
-        setMeasuredDimension(width, actionBarHeight + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0) + extraHeight);
+        setMeasuredDimension(width, actionBarHeight + getStatusBarSpace() + extraHeight);
 
         int textLeft;
         if (backButtonImageView != null && backButtonImageView.getVisibility() != GONE) {
@@ -1702,7 +1704,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        int additionalTop = occupyStatusBar ? AndroidUtilities.statusBarHeight : 0;
+        int additionalTop = getStatusBarSpace();
         if (prevWidth != getMeasuredWidth()) {
             prevWidth = getMeasuredWidth();
             checkAvatarContainerWidth(animatorAvatarContainerWidth.isAnimating());
@@ -1957,6 +1959,14 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     public boolean isSearchFieldVisible() {
         return isSearchFieldVisible;
+    }
+
+    /** Geekgram: 状态栏占用高度（含额外留白） */
+    private int getStatusBarSpace() {
+        if (!occupyStatusBar) {
+            return 0;
+        }
+        return AndroidUtilities.statusBarHeight + AndroidUtilities.dp(GEEKGRAM_STATUS_BAR_GAP_DP);
     }
 
     public void setOccupyStatusBar(boolean value) {

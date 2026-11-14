@@ -927,7 +927,29 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public boolean isPremiumUser(TLRPC.User currentUser) {
-        return currentUser != null && currentUser.premium && !isSupportUser(currentUser);
+        if (currentUser == null) {
+            return false;
+        }
+        // Geekgram: 自己的会员状态以本地开关为准，避免缓存里的旧 premium 字段让会员标识残留
+        if (currentUser.id != 0 && currentUser.id == getUserConfig().getClientUserId()) {
+            return UserConfig.isLocalPremiumEnabled() && !isSupportUser(currentUser);
+        }
+        return currentUser.premium && !isSupportUser(currentUser);
+    }
+
+    /** Geekgram: 本地会员开关切换后，把自己在用户缓存里的那份也同步掉 */
+    public void applyLocalPremium(boolean enabled) {
+        long selfId = getUserConfig().getClientUserId();
+        if (selfId != 0) {
+            TLRPC.User cached = users.get(selfId);
+            if (cached != null) {
+                cached.premium = enabled;
+            }
+        }
+        try {
+            updatePremium(enabled);
+        } catch (Throwable ignore) {
+        }
     }
 
     public boolean didPressTranscribeButtonEnough() {

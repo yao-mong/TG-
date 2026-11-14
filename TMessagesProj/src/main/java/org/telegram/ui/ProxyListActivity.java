@@ -684,7 +684,11 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
         }
         clashRow = rowCount++;
         yoyoLoginRow = rowCount++;
-        yoyoRow = rowCount++;
+        if (ClashCoreManager.isCorePanelHidden()) {
+            yoyoRow = -1;
+        } else {
+            yoyoRow = rowCount++;
+        }
         nodeRow = rowCount++;
         updateRow = -1; // Geekgram: 「检查更新」已移到 设置 -> Geekgram
         if (ClashProxyHelper.isAutoEnabled()) {

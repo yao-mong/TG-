@@ -40,6 +40,7 @@ public class GeekgramSettingsActivity extends Activity {
     private TextView recordSub;
     private TextView premiumSub;
     private TextView nodeSub;
+    private TextView hideCoreSub;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -140,6 +141,14 @@ public class GeekgramSettingsActivity extends Activity {
             }
         });
 
+        hideCoreSub = new TextView(this);
+        addRow("隐藏内核面板入口", hideCoreSub, v -> {
+            boolean next = !ClashCoreManager.isCorePanelHidden();
+            ClashCoreManager.setCorePanelHidden(next);
+            refreshSubtitles();
+            Toast.makeText(this, next ? "代理页已隐藏内核面板入口" : "代理页已显示内核面板入口", Toast.LENGTH_SHORT).show();
+        });
+
         TextView note = new TextView(this);
         note.setText("更新走固定的云更新服务器,官方 Telegram 更新通道已关闭。\n对方撤回消息时,原文会先存在本机,撤回了也能在「撤回记录」里翻看。\n本地会员只改本机显示,不改服务器上的真实订阅状态。");
         note.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
@@ -164,6 +173,11 @@ public class GeekgramSettingsActivity extends Activity {
         nodeSub.setText(ClashCoreManager.isRunning()
                 ? ("内核运行中 · 当前 " + (TextUtils.isEmpty(sel) ? "自动选择" : sel))
                 : "自动选择 / 地区分组 / 手动切换");
+        if (hideCoreSub != null) {
+            hideCoreSub.setText(ClashCoreManager.isCorePanelHidden()
+                    ? "已隐藏 · 代理页不显示这一行"
+                    : "显示中 · 点一下隐藏代理页的内核面板入口");
+        }
     }
 
     private void checkUpdate() {

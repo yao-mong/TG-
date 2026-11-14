@@ -612,7 +612,7 @@ public class UserConfig extends BaseController {
                     }
                 }
                 try {
-                    MessagesController.getInstance(a).updatePremium(enabled);
+                    MessagesController.getInstance(a).applyLocalPremium(enabled);
                 } catch (Throwable ignore) {
                 }
                 NotificationCenter.getInstance(a).postNotificationName(NotificationCenter.currentUserPremiumStatusChanged);

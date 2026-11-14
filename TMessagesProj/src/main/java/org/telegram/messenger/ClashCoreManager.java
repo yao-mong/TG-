@@ -124,6 +124,22 @@ public class ClashCoreManager {
         return SOURCE_LOCAL.equals(getSource());
     }
 
+    /** Geekgram: 是否在代理设置里隐藏「内核面板」入口，默认显示 */
+    public static boolean isCorePanelHidden() {
+        try {
+            return prefs().getBoolean("core_panel_hidden", false);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    public static void setCorePanelHidden(boolean hidden) {
+        try {
+            prefs().edit().putBoolean("core_panel_hidden", hidden).commit();
+        } catch (Throwable ignore) {
+        }
+    }
+
     public static int getNodeCount() {
         try {
             return prefs().getInt(PREF_NODE_COUNT, 0);
