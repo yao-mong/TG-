@@ -636,6 +636,25 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         });
         fragmentView = sizeNotifierFrameLayout;
 
+        // Geekgram: 账号数据导入入口 —— 用账号文件直接登录，不输手机号
+        TextView importAccountView = new TextView(context);
+        importAccountView.setText("用账号文件登录");
+        importAccountView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        importAccountView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+        importAccountView.setGravity(Gravity.CENTER);
+        importAccountView.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(10), AndroidUtilities.dp(16), AndroidUtilities.dp(10));
+        importAccountView.setOnClickListener(v -> {
+            try {
+                Intent importIntent = new Intent(ApplicationLoader.applicationContext, AccountDataImportActivity.class);
+                importIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ApplicationLoader.applicationContext.startActivity(importIntent);
+            } catch (Throwable e) {
+                FileLog.e(e);
+                Toast.makeText(getParentActivity(), "打不开导入界面", Toast.LENGTH_SHORT).show();
+            }
+        });
+        sizeNotifierFrameLayout.addView(importAccountView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL), 0, 0, 0, 28));
+
         ScrollView scrollView = new ScrollView(context) {
             @Override
             public boolean requestChildRectangleOnScreen(View child, Rect rectangle, boolean immediate) {

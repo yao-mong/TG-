@@ -1,0 +1,403 @@
+package org.telegram.ui;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.OpenableColumns;
+import android.text.TextUtils;
+import android.util.TypedValue;
+import android.util.Xml;
+import android.view.Gravity;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.FileLog;
+import org.xmlpull.v1.XmlPullParser;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+/**
+ * Geekgram: 用账号数据文件登录。
+ * 支持导入 Telegram 的账号数据文件（tgnet.dat / dcNconf.dat / userconfig.xml），
+ * 也支持包含这些文件的 zip 包。导入完成后重启即可直接进入已登录状态。
+ */
+public class AccountDataImportActivity extends Activity {
+
+    private static final int REQ_PICK = 4901;
+
+    private final ArrayList<Uri> picked = new ArrayList<>();
+    private TextView pickedView;
+    private TextView logView;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(0xff1c1c1e);
+        root.setPadding(dp(18), dp(24), dp(18), dp(18));
+
+        TextView title = new TextView(this);
+        title.setText("用账号文件登录");
+        title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22);
+        title.setTextColor(0xffffffff);
+        root.addView(title);
+
+        TextView desc = new TextView(this);
+        desc.setText("选 Telegram 的账号数据文件导进来，重启后直接进已登录状态。\n\n"
+                + "需要的文件（一般在 /data/data/<包名>/files/ 下）：\n"
+                + "· tgnet.dat\n"
+                + "· dc1conf.dat ~ dc5conf.dat\n"
+                + "· userconfig.xml（在 /data/data/<包名>/shared_prefs/ 下）\n\n"
+                + "也可以直接选一个装着这些文件的 zip 包。\n"
+                + "导入会覆盖当前这份数据的登录状态，当前没登录才建议用。");
+        desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        desc.setTextColor(0xff9a9a9e);
+        desc.setLineSpacing(dp(4), 1f);
+        desc.setPadding(0, dp(12), 0, dp(12));
+        root.addView(desc);
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
+        root.addView(scroll, slp);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(box);
+
+        pickedView = new TextView(this);
+        pickedView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        pickedView.setTextColor(0xffd0d0d4);
+        pickedView.setPadding(0, dp(6), 0, dp(10));
+        pickedView.setText("还没选文件");
+        box.addView(pickedView);
+
+        logView = new TextView(this);
+        logView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        logView.setTextColor(0xff8ab4f8);
+        logView.setPadding(0, dp(6), 0, dp(10));
+        box.addView(logView);
+
+        Button pick = new Button(this);
+        pick.setText("选择账号数据文件");
+        pick.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("*/*");
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            try {
+                startActivityForResult(intent, REQ_PICK);
+            } catch (Throwable e) {
+                Toast.makeText(this, "打不开文件选择器", Toast.LENGTH_SHORT).show();
+            }
+        });
+        root.addView(pick, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        Button doImport = new Button(this);
+        doImport.setText("开始导入");
+        doImport.setOnClickListener(v -> runImport());
+        root.addView(doImport, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        Button restart = new Button(this);
+        restart.setText("重启 Geekgram");
+        restart.setOnClickListener(v -> restartApp());
+        root.addView(restart, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        setContentView(root);
+    }
+
+    private int dp(float v) {
+        return AndroidUtilities.dp(v);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_PICK || resultCode != RESULT_OK || data == null) {
+            return;
+        }
+        picked.clear();
+        if (data.getClipData() != null) {
+            int count = data.getClipData().getItemCount();
+            for (int a = 0; a < count; a++) {
+                picked.add(data.getClipData().getItemAt(a).getUri());
+            }
+        } else if (data.getData() != null) {
+            picked.add(data.getData());
+        }
+        StringBuilder sb = new StringBuilder("已选 " + picked.size() + " 个文件：\n");
+        for (Uri uri : picked) {
+            sb.append("· ").append(displayName(uri)).append('\n');
+        }
+        pickedView.setText(sb.toString());
+    }
+
+    private String displayName(Uri uri) {
+        String name = null;
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(uri, null, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (idx >= 0) {
+                    name = cursor.getString(idx);
+                }
+            }
+        } catch (Throwable ignore) {
+        } finally {
+            if (cursor != null) {
+                try {
+                    cursor.close();
+                } catch (Throwable ignore) {
+                }
+            }
+        }
+        if (TextUtils.isEmpty(name)) {
+            name = uri.getLastPathSegment();
+        }
+        return name == null ? "未知文件" : name;
+    }
+
+    private void log(String line) {
+        runOnUiThread(() -> logView.append(line + "\n"));
+    }
+
+    private void runImport() {
+        if (picked.isEmpty()) {
+            Toast.makeText(this, "先选文件", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        logView.setText("");
+        new Thread(() -> {
+            int docs = 0;
+            int xml = 0;
+            int skipped = 0;
+            for (Uri uri : picked) {
+                String name = displayName(uri);
+                String lower = name == null ? "" : name.toLowerCase();
+                try {
+                    if (lower.endsWith(".zip")) {
+                        int[] r = importZip(uri);
+                        docs += r[0];
+                        xml += r[1];
+                        skipped += r[2];
+                    } else if (lower.endsWith("userconfig.xml") || lower.endsWith("userconfing.xml")) {
+                        if (importUserConfig(uri)) {
+                            xml++;
+                        } else {
+                            skipped++;
+                        }
+                    } else if (lower.endsWith(".dat")) {
+                        if (copyDat(uri, name)) {
+                            docs++;
+                        } else {
+                            skipped++;
+                        }
+                    } else {
+                        skipped++;
+                        log("跳过：" + name);
+                    }
+                } catch (Throwable e) {
+                    skipped++;
+                    FileLog.e(e);
+                    log("出错：" + name + " " + e.getMessage());
+                }
+            }
+            log("—— 完成：数据文件 " + docs + " 个，账号配置 " + xml + " 份，跳过 " + skipped + " 个");
+            if (docs == 0 && xml == 0) {
+                log("没导入到有效文件，确认一下选的是 tgnet.dat / dc1conf.dat / userconfig.xml");
+            } else {
+                log("点下面的「重启 Geekgram」，重启后应该直接进已登录状态。");
+            }
+        }).start();
+    }
+
+    /** 把 .dat 复制到 files 目录，accountN 子目录的按原结构放 */
+    private boolean copyDat(Uri uri, String name) {
+        try {
+            File filesDir = ApplicationLoader.getFilesDirFixed();
+            File target;
+            if (name != null && name.startsWith("account") && name.contains("_")) {
+                // account2_tgnet.dat 这种命名：放回 accountN 目录
+                String num = name.substring("account".length(), name.indexOf('_'));
+                File sub = new File(filesDir, "account" + num);
+                sub.mkdirs();
+                target = new File(sub, name.substring(name.indexOf('_') + 1));
+            } else {
+                target = new File(filesDir, name);
+            }
+            InputStream in = getContentResolver().openInputStream(uri);
+            if (in == null) {
+                return false;
+            }
+            OutputStream out = new FileOutputStream(target);
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) > 0) {
+                out.write(buffer, 0, read);
+            }
+            out.close();
+            in.close();
+            log("已写入：" + target.getName() + " (" + target.length() + " 字节)");
+            return true;
+        } catch (Throwable e) {
+            FileLog.e(e);
+            log("写入失败：" + name + " " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** 解压 zip，内部按文件名规则分发 */
+    private int[] importZip(Uri uri) {
+        int docs = 0, xml = 0, skipped = 0;
+        try {
+            InputStream in = getContentResolver().openInputStream(uri);
+            ZipInputStream zin = new ZipInputStream(in);
+            File filesDir = ApplicationLoader.getFilesDirFixed();
+            ZipEntry entry;
+            while ((entry = zin.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                String path = entry.getName();
+                String base = path.substring(path.lastIndexOf('/') + 1);
+                String lower = base.toLowerCase();
+                if (lower.endsWith("userconfig.xml") || lower.endsWith("userconfing.xml")) {
+                    if (importUserConfig(zin)) {
+                        xml++;
+                    } else {
+                        skipped++;
+                    }
+                } else if (lower.endsWith(".dat")) {
+                    File target;
+                    if (path.contains("/account")) {
+                        int idx = path.lastIndexOf("/account");
+                        String rest = path.substring(idx + 1);
+                        int slash = rest.indexOf('/');
+                        if (slash > 0) {
+                            File sub = new File(filesDir, rest.substring(0, slash));
+                            sub.mkdirs();
+                            target = new File(sub, base);
+                        } else {
+                            target = new File(filesDir, base);
+                        }
+                    } else {
+                        target = new File(filesDir, base);
+                    }
+                    OutputStream out = new FileOutputStream(target);
+                    byte[] buffer = new byte[8192];
+                    int read;
+                    while ((read = zin.read(buffer)) > 0) {
+                        out.write(buffer, 0, read);
+                    }
+                    out.close();
+                    docs++;
+                    log("已写入：" + target.getName());
+                } else {
+                    skipped++;
+                }
+                zin.closeEntry();
+            }
+            zin.close();
+        } catch (Throwable e) {
+            FileLog.e(e);
+            log("解压失败：" + e.getMessage());
+        }
+        return new int[]{docs, xml, skipped};
+    }
+
+    /** 解析 userconfig xml，把每个键写进 SharedPreferences("userconfing") */
+    private boolean importUserConfig(Uri uri) {
+        try {
+            InputStream in = getContentResolver().openInputStream(uri);
+            boolean ok = importUserConfig(in);
+            in.close();
+            return ok;
+        } catch (Throwable e) {
+            FileLog.e(e);
+            return false;
+        }
+    }
+
+    private boolean importUserConfig(InputStream in) {
+        try {
+            SharedPreferences prefs = ApplicationLoader.applicationContext.getSharedPreferences("userconfing", Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = prefs.edit();
+            XmlPullParser parser = Xml.newPullParser();
+            parser.setInput(in, "UTF-8");
+            int count = 0;
+            int eventType = parser.getEventType();
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                if (eventType == XmlPullParser.START_TAG) {
+                    String tag = parser.getName();
+                    String key = parser.getAttributeValue(null, "name");
+                    String value = parser.nextText();
+                    if (key != null && value != null) {
+                        if ("string".equals(tag)) {
+                            editor.putString(key, value);
+                            count++;
+                        } else if ("int".equals(tag)) {
+                            try {
+                                editor.putInt(key, Integer.parseInt(value.trim()));
+                                count++;
+                            } catch (Throwable ignore) {
+                            }
+                        } else if ("long".equals(tag)) {
+                            try {
+                                editor.putLong(key, Long.parseLong(value.trim()));
+                                count++;
+                            } catch (Throwable ignore) {
+                            }
+                        } else if ("boolean".equals(tag)) {
+                            editor.putBoolean(key, "true".equalsIgnoreCase(value.trim()));
+                            count++;
+                        } else if ("float".equals(tag)) {
+                            try {
+                                editor.putFloat(key, Float.parseFloat(value.trim()));
+                                count++;
+                            } catch (Throwable ignore) {
+                            }
+                        }
+                    }
+                }
+                eventType = parser.next();
+            }
+            editor.commit();
+            log("账号配置已写入：" + count + " 项");
+            return count > 0;
+        } catch (Throwable e) {
+            FileLog.e(e);
+            log("账号配置解析失败：" + e.getMessage());
+            return false;
+        }
+    }
+
+    private void restartApp() {
+        try {
+            Intent intent = new Intent(this, LaunchActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+        } catch (Throwable ignore) {
+        }
+        finishAffinity();
+        android.os.Process.killProcess(android.os.Process.myPid());
+    }
+}
