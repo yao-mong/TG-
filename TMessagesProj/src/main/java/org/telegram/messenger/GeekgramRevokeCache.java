@@ -85,7 +85,7 @@ public class GeekgramRevokeCache {
      * 只缓存对方发来的消息(out = 0),自己删自己的不记录。
      */
     public static void capture(SQLiteDatabase database, int account, long dialogId, ArrayList<Integer> messages) {
-        if (!isEnabled() || database == null || dialogId == 0 || messages == null || messages.isEmpty()) {
+        if (!isEnabled() || database == null || messages == null || messages.isEmpty()) {
             return;
         }
         // 整段清空(清聊天记录、清空频道)这类不记
@@ -96,16 +96,21 @@ public class GeekgramRevokeCache {
         SQLiteCursor cursor = null;
         final ArrayList<Entry> found = new ArrayList<>();
         try {
-            cursor = database.queryFinalized(String.format(Locale.US,
-                    "SELECT mid, date, out, data FROM messages_v2 WHERE uid = %d AND mid IN(%s)", dialogId, ids));
+            // dialogId == 0 表示这次删除没带会话（服务器撤回更新就是这样，一批 mid 全局下发），
+            // 这种时候按 mid 直接查，uid 从行里取回来。
+            final String where = dialogId != 0
+                    ? String.format(Locale.US, "uid = %d AND mid IN(%s)", dialogId, ids)
+                    : String.format(Locale.US, "mid IN(%s)", ids);
+            cursor = database.queryFinalized("SELECT uid, mid, date, out, data FROM messages_v2 WHERE " + where);
             while (cursor.next()) {
-                final int mid = (int) cursor.longValue(0);
-                final int date = (int) cursor.longValue(1);
-                final int out = (int) cursor.longValue(2);
+                final long uid = cursor.longValue(0);
+                final int mid = (int) cursor.longValue(1);
+                final int date = (int) cursor.longValue(2);
+                final int out = (int) cursor.longValue(3);
                 if (out != 0) {
                     continue;
                 }
-                NativeByteBuffer data = cursor.byteBufferValue(3);
+                NativeByteBuffer data = cursor.byteBufferValue(4);
                 if (data == null) {
                     continue;
                 }
@@ -124,7 +129,7 @@ public class GeekgramRevokeCache {
                     continue;
                 }
                 Entry entry = new Entry();
-                entry.dialogId = dialogId;
+                entry.dialogId = uid;
                 entry.messageId = mid;
                 entry.date = date;
                 entry.fromId = fromId;
@@ -140,6 +145,71 @@ public class GeekgramRevokeCache {
         if (!found.isEmpty()) {
             append(found);
         }
+    }
+
+    /**
+     * 防撤回：把「对方发来的」消息从待删除列表里摘出来，不删。
+     * 自己发的（自己撤回/自己删）照删。只在存储线程里调用。
+     */
+    public static ArrayList<Integer> filterDeletable(SQLiteDatabase database, long dialogId, ArrayList<Integer> messages) {
+        if (!isEnabled() || database == null || messages == null || messages.isEmpty()) {
+            return messages;
+        }
+        // 一次删几百条，基本是清空聊天记录/清空频道，不拦
+        if (messages.size() > 300) {
+            return messages;
+        }
+        SQLiteCursor cursor = null;
+        try {
+            final String ids = TextUtils.join(",", messages);
+            final String where = dialogId != 0
+                    ? String.format(Locale.US, "uid = %d AND mid IN(%s)", dialogId, ids)
+                    : String.format(Locale.US, "mid IN(%s)", ids);
+            cursor = database.queryFinalized("SELECT mid, out FROM messages_v2 WHERE " + where);
+            ArrayList<Integer> incoming = new ArrayList<>();
+            while (cursor.next()) {
+                if (cursor.intValue(1) == 0) {
+                    incoming.add(cursor.intValue(0));
+                }
+            }
+            if (incoming.isEmpty()) {
+                return messages;
+            }
+            ArrayList<Integer> rest = new ArrayList<>(messages.size());
+            for (int a = 0; a < messages.size(); a++) {
+                Integer mid = messages.get(a);
+                if (mid != null && !incoming.contains(mid)) {
+                    rest.add(mid);
+                }
+            }
+            return rest;
+        } catch (Throwable ignore) {
+            return messages;
+        } finally {
+            if (cursor != null) {
+                cursor.dispose();
+            }
+        }
+    }
+
+    /**
+     * 界面层用：把「对方发来的」消息从删除通知里摘出来，让它们继续留在聊天列表。
+     * 只读内存里的 MessageObject，不碰数据库。
+     */
+    public static ArrayList<Integer> filterForUi(ArrayList<Integer> ids, android.util.SparseArray<MessageObject> dict) {
+        if (!isEnabled() || ids == null || ids.isEmpty() || dict == null) {
+            return ids;
+        }
+        ArrayList<Integer> result = new ArrayList<>(ids.size());
+        for (int a = 0; a < ids.size(); a++) {
+            Integer id = ids.get(a);
+            MessageObject obj = id == null ? null : dict.get(id);
+            if (obj != null && obj.messageOwner != null && !obj.messageOwner.out) {
+                continue;
+            }
+            result.add(id);
+        }
+        return result;
     }
 
     private static String extractText(TLRPC.Message message) {

@@ -165,6 +165,7 @@ import org.telegram.messenger.FactCheckController;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FlagSecureReason;
+import org.telegram.messenger.GeekgramRevokeCache;
 import org.telegram.messenger.HashtagSearchController;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
@@ -23114,6 +23115,11 @@ public class ChatActivity extends BaseFragment implements
                 return;
             }
             ArrayList<Integer> markAsDeletedMessages = (ArrayList<Integer>) args[0];
+            // Geekgram 防撤回：对方发来的消息不从列表里移除，留在原地
+            markAsDeletedMessages = GeekgramRevokeCache.filterForUi(markAsDeletedMessages, messagesDict[0]);
+            if (markAsDeletedMessages.isEmpty()) {
+                return;
+            }
             long channelId = (Long) args[1];
             boolean update = args.length > 2 && (boolean) args[2];
             boolean sent = args.length > 3 && (boolean) args[3];

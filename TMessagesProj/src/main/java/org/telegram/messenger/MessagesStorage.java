@@ -14699,10 +14699,20 @@ public class MessagesStorage extends BaseController {
         SQLiteCursor cursor = null;
         SQLitePreparedStatement state = null;
         try {
-            // Geekgram: 删之前把对方撤回的内容先抄一份到本地缓存
+            // Geekgram 防撤回：先把对方撤回的内容抄一份，再把「对方发来的」消息从待删列表摘掉
+            // （服务器撤回更新下发的是一批 mid、不带会话 ID，所以 dialogId 可能是 0）
             if (mode == 0) {
                 try {
                     GeekgramRevokeCache.capture(database, currentAccount, dialogId, messages);
+                    ArrayList<Integer> deletable = GeekgramRevokeCache.filterDeletable(database, dialogId, messages);
+                    if (deletable.isEmpty()) {
+                        return null;
+                    }
+                    if (deletable.size() != messages.size()) {
+                        // 就地改列表：调用方拿同一份去发删除通知，这样界面也不会把消息抹掉
+                        messages.clear();
+                        messages.addAll(deletable);
+                    }
                 } catch (Throwable ignore) {
                 }
             }

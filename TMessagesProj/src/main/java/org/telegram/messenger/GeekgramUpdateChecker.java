@@ -37,11 +37,17 @@ public class GeekgramUpdateChecker {
     private static final String PREF_LAST = "geekgram_update_last";
     private static final String PREF_LAST_VC = "geekgram_update_last_vc";
     private static final String PREF_INFO = "geekgram_update_info";
+    private static final String PREF_INFO_AT = "geekgram_update_info_at";
     private static final String PREF_SEEN = "geekgram_update_seen";
     private static final String PREF_FORCE_VC = "geekgram_force_vc";
 
-    /** 两次自动检查的最小间隔 */
-    private static final long MIN_INTERVAL_MS = 10 * 60 * 1000L;
+    /** 两次自动检查的最小间隔（短一点，后台改完重开 App 就能看到效果） */
+    private static final long MIN_INTERVAL_MS = 60 * 1000L;
+
+    /** 本地缓存的更新信息最多认多久，过期就重新联网问 */
+    private static final long CACHE_TTL_MS = 24 * 60 * 60 * 1000L;
+
+    private static java.lang.ref.WeakReference<AlertDialog> currentDialog;
 
     private static volatile Info lastInfo;
     private static final ArrayList<StateListener> listeners = new ArrayList<>();
@@ -171,24 +177,25 @@ public class GeekgramUpdateChecker {
 
     // ---------------- 检查 ----------------
 
-    /** 启动时调用:先用缓存立刻上横幅,再按需联网刷新 */
+    /**
+     * 启动时调用：缓存只用来先上横幅，强制更新必须等这次联网校验回来再弹。
+     * 这样后台把版本删了/取消勾强制，重启就立刻不再拦人，不会被本地缓存卡死。
+     */
     public static void checkOnStart(final Activity activity) {
         if (!isConfigured()) {
             return;
         }
         final Info cached = loadCachedInfo();
-        if (cached != null) {
+        if (cached != null && cached.versionCode > getVersionCode()) {
             lastInfo = cached;
             notifyListeners(cached);
-            // 强制更新:启动就弹,不给跳过
-            if (activity != null && cached.hasUpdate && cached.force && cached.versionCode > getVersionCode()) {
-                markForcePending(cached.versionCode);
-                AndroidUtilities.runOnUIThread(() -> showAnnouncement(activity, cached));
-            }
+        } else if (cached != null) {
+            // 缓存里那条版本已经装上/比当前低了，直接作废
+            clearCachedInfo();
         }
         final long last = prefs().getLong(PREF_LAST, 0);
         final int lastVc = prefs().getInt(PREF_LAST_VC, 0);
-        // 升级安装后（版本号变了）无条件立刻检查一次，不吃 10 分钟间隔
+        // 升级安装后（版本号变了）无条件立刻检查一次，不吃检查间隔
         if (lastVc == getVersionCode() && System.currentTimeMillis() - last < MIN_INTERVAL_MS) {
             return;
         }
@@ -232,6 +239,13 @@ public class GeekgramUpdateChecker {
                 notifyListeners(result);
                 if (callback != null) {
                     callback.run(true, null, result);
+                }
+                if (!result.hasUpdate || result.versionCode <= getVersionCode()) {
+                    // 云端已经没有这个版本了（删了/下架了/当前版本已够新）：
+                    // 把本地强制状态和弹窗一起收掉，别再拿旧缓存拦人
+                    clearForcePending();
+                    dismissAnnouncement();
+                    return;
                 }
                 if (activity != null && !activity.isFinishing() && result.hasUpdate) {
                     if (result.force) {
@@ -334,7 +348,15 @@ public class GeekgramUpdateChecker {
             o.put("changelog", info.changelog == null ? "" : info.changelog);
             o.put("notice", info.notice == null ? "" : info.notice);
             o.put("minVersionCode", info.minVersionCode);
-            prefs().edit().putString(PREF_INFO, o.toString()).apply();
+            prefs().edit().putString(PREF_INFO, o.toString())
+                    .putLong(PREF_INFO_AT, System.currentTimeMillis()).apply();
+        } catch (Throwable ignore) {
+        }
+    }
+
+    private static void clearCachedInfo() {
+        try {
+            prefs().edit().remove(PREF_INFO).remove(PREF_INFO_AT).apply();
         } catch (Throwable ignore) {
         }
     }
@@ -345,7 +367,21 @@ public class GeekgramUpdateChecker {
             if (TextUtils.isEmpty(raw)) {
                 return null;
             }
-            return parse(raw);
+            long at = prefs().getLong(PREF_INFO_AT, 0);
+            if (at <= 0 || System.currentTimeMillis() - at > CACHE_TTL_MS) {
+                // 老缓存（升级前留下的，没有时间戳）或者放太久了，一律不认
+                clearCachedInfo();
+                return null;
+            }
+            Info info = parse(raw);
+            if (info == null) {
+                return null;
+            }
+            if (info.versionCode <= getVersionCode()) {
+                info.hasUpdate = false;
+                info.force = false;
+            }
+            return info;
         } catch (Throwable e) {
             return null;
         }
@@ -376,6 +412,7 @@ public class GeekgramUpdateChecker {
             return;
         }
         final boolean force = info.force;
+        dismissAnnouncement();
         AlertDialog.Builder builder = new AlertDialog.Builder(activity);
         builder.setTitle(force ? "必须更新" : "发现新版本");
         builder.setMessage(buildMessage(info));
@@ -394,14 +431,35 @@ public class GeekgramUpdateChecker {
             builder.setNegativeButton("以后再说", (d, w) -> {
                 prefs().edit().putInt(PREF_SEEN, info.versionCode).apply();
             });
+        } else {
+            // 强制更新也给个出口：重新问一次服务器。后台撤了强制/删了版本就不会再拦
+            builder.setNeutralButton("重新检查", (d, w) -> checkAsync(activity, true, null));
         }
         AlertDialog dialog = builder.create();
         dialog.setCancelable(!force);
         dialog.setCanceledOnTouchOutside(!force);
+        currentDialog = new java.lang.ref.WeakReference<>(dialog);
         try {
             dialog.show();
         } catch (Throwable ignore) {
         }
+    }
+
+    /** 云端已经没这个版本了，把正在挡路的强制更新弹窗关掉 */
+    public static void dismissAnnouncement() {
+        final AlertDialog dialog = currentDialog == null ? null : currentDialog.get();
+        currentDialog = null;
+        if (dialog == null) {
+            return;
+        }
+        AndroidUtilities.runOnUIThread(() -> {
+            try {
+                if (dialog.isShowing()) {
+                    dialog.dismiss();
+                }
+            } catch (Throwable ignore) {
+            }
+        });
     }
 
     private static String buildMessage(Info info) {
