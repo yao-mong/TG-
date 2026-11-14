@@ -149,6 +149,16 @@ public class GeekgramSettingsActivity extends Activity {
             Toast.makeText(this, next ? "代理页已隐藏内核面板入口" : "代理页已显示内核面板入口", Toast.LENGTH_SHORT).show();
         });
 
+        TextView exportSub = new TextView(this);
+        addRow("导出账号数据", exportSub, v -> {
+            try {
+                startActivity(new android.content.Intent(this, AccountDataExportActivity.class));
+            } catch (Throwable e) {
+                Toast.makeText(this, "打不开导出页", Toast.LENGTH_SHORT).show();
+            }
+        });
+        exportSub.setText("打包成 zip · 换机免验证码登录");
+
         TextView note = new TextView(this);
         note.setText("更新走固定的云更新服务器,官方 Telegram 更新通道已关闭。\n对方撤回消息时,原文会先存在本机,撤回了也能在「撤回记录」里翻看。\n本地会员只改本机显示,不改服务器上的真实订阅状态。");
         note.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);

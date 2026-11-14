@@ -121,6 +121,17 @@ public class AccountDataImportActivity extends Activity {
         restart.setOnClickListener(v -> restartApp());
         root.addView(restart, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        Button export = new Button(this);
+        export.setText("导出当前账号数据（zip）");
+        export.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(this, AccountDataExportActivity.class));
+            } catch (Throwable e) {
+                Toast.makeText(this, "打不开导出页", Toast.LENGTH_SHORT).show();
+            }
+        });
+        root.addView(export, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         setContentView(root);
     }
 
@@ -265,6 +276,37 @@ public class AccountDataImportActivity extends Activity {
         }
     }
 
+    /** 从 zip 内路径里认出 accountN 目录名；根级 "account2/tgnet.dat" 和 "x/account2/tgnet.dat" 都认 */
+    private String accountDirOf(String path) {
+        if (TextUtils.isEmpty(path)) {
+            return null;
+        }
+        String p = path.replace('\\', '/');
+        while (p.startsWith("/")) {
+            p = p.substring(1);
+        }
+        String[] parts = p.split("/");
+        if (parts.length < 2) {
+            return null;
+        }
+        for (int a = 0; a < parts.length - 1; a++) {
+            String seg = parts[a];
+            if (seg.startsWith("account") && seg.length() > 7) {
+                boolean allDigits = true;
+                for (int b = 7; b < seg.length(); b++) {
+                    if (!Character.isDigit(seg.charAt(b))) {
+                        allDigits = false;
+                        break;
+                    }
+                }
+                if (allDigits) {
+                    return seg;
+                }
+            }
+        }
+        return null;
+    }
+
     /** 解压 zip，内部按文件名规则分发 */
     private int[] importZip(Uri uri) {
         int docs = 0, xml = 0, skipped = 0;
@@ -288,17 +330,11 @@ public class AccountDataImportActivity extends Activity {
                     }
                 } else if (lower.endsWith(".dat")) {
                     File target;
-                    if (path.contains("/account")) {
-                        int idx = path.lastIndexOf("/account");
-                        String rest = path.substring(idx + 1);
-                        int slash = rest.indexOf('/');
-                        if (slash > 0) {
-                            File sub = new File(filesDir, rest.substring(0, slash));
-                            sub.mkdirs();
-                            target = new File(sub, base);
-                        } else {
-                            target = new File(filesDir, base);
-                        }
+                    String dirName = accountDirOf(path);
+                    if (dirName != null) {
+                        File sub = new File(filesDir, dirName);
+                        sub.mkdirs();
+                        target = new File(sub, base);
                     } else {
                         target = new File(filesDir, base);
                     }
