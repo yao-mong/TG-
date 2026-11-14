@@ -166,6 +166,7 @@ import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FlagSecureReason;
 import org.telegram.messenger.GeekgramRevokeCache;
+import org.telegram.messenger.GeekgramRevokeMarks;
 import org.telegram.messenger.HashtagSearchController;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
@@ -22960,6 +22961,27 @@ public class ChatActivity extends BaseFragment implements
         }
     }
 
+    /**
+     * Geekgram 防撤回：把被保留下来的消息从「已删除」状态里救回来，
+     * 让它们继续正常显示（内容、时间都画出来），时间旁边再加上「已删除」标记。
+     */
+    private void restoreRevokedMessages(ArrayList<Integer> ids) {
+        if (ids == null || ids.isEmpty() || messagesDict[0] == null) {
+            return;
+        }
+        for (int a = 0, n = ids.size(); a < n; a++) {
+            Integer mid = ids.get(a);
+            MessageObject obj = mid == null ? null : messagesDict[0].get(mid);
+            if (obj != null) {
+                obj.deleted = false;
+                obj.deletedByThanos = false;
+            }
+        }
+        if (chatAdapter != null) {
+            chatAdapter.notifyDataSetChanged(false);
+        }
+    }
+
     private void didReceivedNotification3(int id, int account, final Object... args) {
         if (id == NotificationCenter.messagesRead) {
             if (chatMode == MODE_SCHEDULED || chatMode == MODE_SAVED) {
@@ -23116,7 +23138,28 @@ public class ChatActivity extends BaseFragment implements
             }
             ArrayList<Integer> markAsDeletedMessages = (ArrayList<Integer>) args[0];
             // Geekgram 防撤回：对方发来的消息不从列表里移除，留在原地
+            // 被保留下来的这些：打上撤回标记（时间旁显示「已删除」），并把 deleted 状态清掉继续正常绘制
+            ArrayList<Integer> geekgramKept = null;
+            if (GeekgramRevokeCache.isEnabled()) {
+                for (int a = 0, n = markAsDeletedMessages.size(); a < n; a++) {
+                    Integer mid = markAsDeletedMessages.get(a);
+                    MessageObject obj = mid == null ? null : messagesDict[0].get(mid);
+                    if (obj != null && obj.messageOwner != null && !obj.messageOwner.out) {
+                        if (geekgramKept == null) {
+                            geekgramKept = new ArrayList<>();
+                        }
+                        geekgramKept.add(mid);
+                    }
+                }
+            }
             markAsDeletedMessages = GeekgramRevokeCache.filterForUi(markAsDeletedMessages, messagesDict[0]);
+            if (geekgramKept != null) {
+                final ArrayList<Integer> kept = geekgramKept;
+                GeekgramRevokeMarks.mark(kept);
+                restoreRevokedMessages(kept);
+                // 删除流程随后还会把 deleted 设回 true，排到队列尾部再压一次
+                AndroidUtilities.runOnUIThread(() -> restoreRevokedMessages(kept));
+            }
             if (markAsDeletedMessages.isEmpty()) {
                 return;
             }

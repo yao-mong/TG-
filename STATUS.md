@@ -1,10 +1,39 @@
 # Geekgram 工程状态
 
-当前交付：v12（output/Geekgram-13.2.6-arm64-v12.apk）
-versionCode 73139 / versionName 13.2.6 / 包名 com.geekrem.messenger
+当前交付：v13（output/Geekgram-13.2.7-arm64-v13.apk）
+versionCode 73149 / versionName 13.2.7 / 包名 com.geekrem.messenger
 签名 SHA256 d221217b…526fd4（v2 起未变，可覆盖安装）
 
-## v12 修复（用户反馈两条）
+## v13 修复（用户反馈两条 + 上一轮未完成的收尾）
+
+### 1. 内置内核启动不了 / 面板打开白屏
+- **根因 A（内核）**：v11 把 `useLegacyPackaging` 改成 false（原生库不压缩、直接从 APK 映射），
+  启动崩溃是修好了，但 nativeLibraryDir 里就没有真实文件了 —— 内核是要 exec 的独立可执行文件，
+  映射进来的 .so 没有执行权限，所以「内核启动不了 / 内核没解出来」。
+- **根因 B（面板）**：面板整页是网页渲染，网络一断就一片白；拉订阅那步被掐（connection abort）。
+- 修复：
+  - `useLegacyPackaging` 改回 true（内核要被解压成可执行文件）；
+  - `ClashCoreManager` 重写：订阅下载接 DoH 兜底（GeekgramNet）、本地缓存兜底（刷新失败用旧缓存照跑）、
+    内核二进制多路径查找、日志落 core.log 并在面板里可看；
+  - 订阅支持离线导入：节点链接（ss/vmess/vless/trojan/hysteria2）、整份 YAML、剪贴板一键（NodeLinkParser）；
+  - 面板换成原生界面 `CorePanelActivity`（不再依赖网页），已补 AndroidManifest 注册（v8 闪退教训）。
+
+### 2. 撤回消息在时间旁边显示「已删除」
+- 新增 `GeekgramRevokeMarks`：撤回标记集合，持久化在全局设置（`geekgram_revoked_marks`），重启还在；
+- `GeekgramRevokeCache.filterDeletable / filterForUi` 在拦下删除时打标记；
+- `ChatActivity` 收到 messagesDeleted 后把保留下来的消息 `deleted` 状态清掉（否则不绘制），
+  并排一次 UI 队列把删除流程后置的 `deleted=true` 再压回去；
+- `ChatMessageCell` 在时间字符串前拼「已删除 」（红色/灰色时间样式不变），
+  `drawTimeInternal` 对打了标记的消息照常绘制时间。
+
+## v13 已验证
+- aapt2 badging：versionCode 73149 / versionName 13.2.7 / arm64-v8a
+- apksigner：SHA-256 d221217b…526fd4，与 v12 一致，可覆盖安装
+- dex 实测含 `geekgram_revoked_marks`、`已删除`（classes3.dex）、`CorePanelActivity`（清单已注册）
+- 包体 63MB（原生库恢复压缩，v12 是 121MB）
+- 未在真机运行（沙箱无设备）：内核/面板/撤回标记都只做了静态验证
+
+## v12 修复（继承）
 
 ### 1. 后台删了版本，App 仍弹「必须更新」
 - **根因**：启动时 `checkOnStart()` 先读本地 `PREF_INFO` 缓存，缓存里的 `force/hasUpdate`

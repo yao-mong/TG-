@@ -65,8 +65,9 @@ android {
 
     packagingOptions {
         jniLibs {
-            useLegacyPackaging = false
-            // 内置内核是独立的可执行文件，不能被当成调试符号裁掉
+            // 内置内核要当独立可执行文件跑，必须解压到 nativeLibraryDir 才有执行权限
+            useLegacyPackaging = true
+            // 内置内核不能被当成调试符号裁掉
             keepDebugSymbols += "**/libclashcore.so"
         }
     }

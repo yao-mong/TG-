@@ -920,11 +920,9 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
                         textCell.setTextAndValue("检查更新",
                                 GeekgramUpdateChecker.isConfigured() ? "点击检查 · 长按改服务器" : "未配置服务器 · 长按设置", true);
                     } else if (position == yoyoRow) {
-                        String sub = ClashCoreManager.getSubscription();
-                        textCell.setTextAndValue("YOYO 面板", TextUtils.isEmpty(sub) ? "登录 / 注册 · 获取订阅" : "已导入订阅 · 重新登录", true);
+                        textCell.setTextAndValue("内核面板", ClashCoreManager.isRunning() ? "运行中 · 导入 / 日志" : "状态 / 导入节点 / 日志", true);
                     } else if (position == clashSubRow) {
-                        String sub = ClashCoreManager.getSubscription();
-                        textCell.setTextAndValue("Clash 订阅", shortSub(sub), true);
+                        textCell.setTextAndValue("订阅 / 节点", ClashCoreManager.sourceText(), true);
                     } else if (position == clashStatusRow) {
                         textCell.setTextAndValue("内置内核", ClashCoreManager.statusText(), true);
                     }
@@ -1141,7 +1139,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
     }
 
     private void startClashCore(boolean forceRefresh) {
-        if (!ClashCoreManager.hasSubscription()) {
+        if (!ClashCoreManager.isConfigured()) {
             showClashSubDialog();
             return;
         }
@@ -1194,7 +1192,7 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
             return;
         }
         try {
-            context.startActivity(new Intent(context, YoyoPanelActivity.class));
+            context.startActivity(new Intent(context, CorePanelActivity.class));
         } catch (Throwable e) {
             Toast.makeText(context, "打不开面板：" + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
@@ -1219,21 +1217,25 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
         container.addView(editText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.LEFT | Gravity.TOP, 24, 4, 24, 0));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(context)
-                .setTitle("Clash 订阅")
+                .setTitle("订阅 / 节点")
                 .setView(container)
                 .setPositiveButton("保存并连接", (dialog, which) -> {
                     String url = editText.getText().toString().trim();
-                    if (TextUtils.isEmpty(url) || !(url.startsWith("http://") || url.startsWith("https://"))) {
-                        Toast.makeText(context, "链接要以 http 开头", Toast.LENGTH_SHORT).show();
+                    if (TextUtils.isEmpty(url) || url.length() < 8) {
+                        Toast.makeText(context, "先填订阅链接或节点", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    ClashCoreManager.setSubscription(url);
+                    String msg = ClashCoreManager.importText(url);
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show();
+                    if (!ClashCoreManager.isConfigured()) {
+                        return;
+                    }
                     ClashCoreManager.stop();
                     refreshClashRows();
                     startClashCore(true);
                 })
                 .setNegativeButton("取消", null);
-        if (ClashCoreManager.hasSubscription()) {
+        if (ClashCoreManager.isConfigured()) {
             builder.setNeutralButton("停止内核", (dialog, which) -> {
                 ClashCoreManager.stop();
                 refreshClashRows();

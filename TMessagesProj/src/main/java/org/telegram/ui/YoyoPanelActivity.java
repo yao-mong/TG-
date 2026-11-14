@@ -9,6 +9,7 @@
 package org.telegram.ui;
 
 import android.content.Intent;
+import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -25,6 +26,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -34,6 +36,8 @@ import androidx.annotation.Keep;
 
 import org.telegram.messenger.ClashCoreManager;
 import org.telegram.messenger.ClashProxyHelper;
+import org.telegram.messenger.GeekgramNet;
+import org.telegram.messenger.GeekgramPanelProxy;
 import org.telegram.messenger.R;
 
 public class YoyoPanelActivity extends android.app.Activity {
@@ -50,6 +54,10 @@ public class YoyoPanelActivity extends android.app.Activity {
     private LinearLayout bottomBar;
     private TextView bottomText;
     private TextView actionButton;
+    private View errorBox;
+    private TextView errorText;
+    private boolean usingProxy;
+    private boolean proxyStarting;
 
     private String pendingToken;
 
@@ -68,6 +76,11 @@ public class YoyoPanelActivity extends android.app.Activity {
         webView = new WebView(this);
         configureWebView(webView);
         root.addView(webView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        errorBox = buildErrorBox();
+        errorBox.setVisibility(View.GONE);
+        root.addView(errorBox, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         bottomBar = buildBottomBar();
@@ -202,7 +215,37 @@ public class YoyoPanelActivity extends android.app.Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                if (url != null && !"about:blank".equals(url)) {
+                    hideError();
+                }
                 view.evaluateJavascript(HOOK_JS, null);
+            }
+
+            @Override
+            public void onReceivedError(WebView view, android.webkit.WebResourceRequest request,
+                                        android.webkit.WebResourceError error) {
+                if (request == null || !request.isForMainFrame()) {
+                    return;
+                }
+                showError(error == null ? "连不上面板" : String.valueOf(error.getDescription()));
+            }
+
+            @SuppressWarnings("deprecation")
+            @Override
+            public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                if (Build.VERSION.SDK_INT >= 23) {
+                    return;
+                }
+                showError(TextUtils.isEmpty(description) ? "连不上面板" : description);
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, android.webkit.WebResourceRequest request,
+                                            android.webkit.WebResourceResponse errorResponse) {
+                if (request == null || !request.isForMainFrame() || errorResponse == null) {
+                    return;
+                }
+                showError("面板返回 HTTP " + errorResponse.getStatusCode());
             }
         });
     }
@@ -212,6 +255,10 @@ public class YoyoPanelActivity extends android.app.Activity {
             return false;
         }
         if (url.startsWith("http://") || url.startsWith("https://")) {
+            if (url.startsWith("http://127.0.0.1:")) {
+                // 备用通道（本机代理），留在内嵌页
+                return false;
+            }
             // 面板本站继续留在内嵌页，外链交给系统浏览器
             if (url.startsWith(PANEL_BASE)) {
                 return false;
@@ -268,6 +315,186 @@ public class YoyoPanelActivity extends android.app.Activity {
         finish();
     }
 
+    private View buildErrorBox() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setBackgroundColor(Color.WHITE);
+        box.setPadding(dp(24), dp(24), dp(24), dp(24));
+
+        TextView title = new TextView(this);
+        title.setText("面板没能打开");
+        title.setTextSize(17);
+        title.setTextColor(0xFF333B45);
+        title.setGravity(Gravity.CENTER);
+        box.addView(title);
+
+        errorText = new TextView(this);
+        errorText.setTextSize(13);
+        errorText.setTextColor(0xFF6B7684);
+        errorText.setGravity(Gravity.CENTER);
+        errorText.setPadding(0, dp(10), 0, dp(16));
+        box.addView(errorText);
+
+        LinearLayout row1 = new LinearLayout(this);
+        row1.setOrientation(LinearLayout.HORIZONTAL);
+        row1.setGravity(Gravity.CENTER);
+        row1.addView(makeButton("重试", this::loadDirect));
+        row1.addView(makeButton("走备用通道", this::loadViaProxy));
+        box.addView(row1);
+
+        LinearLayout row2 = new LinearLayout(this);
+        row2.setOrientation(LinearLayout.HORIZONTAL);
+        row2.setGravity(Gravity.CENTER);
+        row2.addView(makeButton("用浏览器打开", new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(PANEL_LOGIN)));
+                } catch (Throwable ignore) {
+                }
+            }
+        }));
+        row2.addView(makeButton("手动填订阅", this::showManualSubDialog));
+        box.addView(row2);
+
+        return box;
+    }
+
+    private TextView makeButton(String text, Runnable action) {
+        TextView b = new TextView(this);
+        b.setText(text);
+        b.setTextSize(14);
+        b.setTextColor(Color.WHITE);
+        b.setGravity(Gravity.CENTER);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(0xFF2B84FB);
+        bg.setCornerRadius(dp(18));
+        b.setBackground(bg);
+        b.setPadding(dp(14), dp(8), dp(14), dp(8));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(dp(6), dp(6), dp(6), dp(6));
+        b.setLayoutParams(lp);
+        b.setOnClickListener(v -> action.run());
+        return b;
+    }
+
+    private void showError(final String reason) {
+        runOnUiThread(() -> {
+            if (errorText != null) {
+                errorText.setText((TextUtils.isEmpty(reason) ? "连不上面板" : reason)
+                        + "\n\n这个网络下直连面板可能被拦，点「走备用通道」再试一次；"
+                        + "也可以在「手动填订阅」里直接粘贴订阅链接，内核一样能用。");
+            }
+            if (errorBox != null) {
+                errorBox.setVisibility(View.VISIBLE);
+            }
+            if (webView != null) {
+                webView.setVisibility(View.GONE);
+            }
+            if (bottomText != null) {
+                bottomText.setText("面板没打开 · 可走备用通道");
+            }
+        });
+    }
+
+    private void hideError() {
+        if (errorBox != null) {
+            errorBox.setVisibility(View.GONE);
+        }
+        if (webView != null) {
+            webView.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void loadDirect() {
+        usingProxy = false;
+        GeekgramPanelProxy.stop();
+        hideError();
+        if (bottomText != null) {
+            bottomText.setText("登录后会自动读取订阅");
+        }
+        if (webView != null) {
+            webView.loadUrl(PANEL_LOGIN);
+        }
+    }
+
+    /** 直连打不开时，走本机代理（DoH 解析真实 IP + 自建 TLS 连接）把面板取回来 */
+    private void loadViaProxy() {
+        hideError();
+        if (webView != null) {
+            webView.loadUrl("about:blank");
+        }
+        if (proxyStarting) {
+            return;
+        }
+        proxyStarting = true;
+        if (bottomText != null) {
+            bottomText.setText("正在准备备用通道…");
+        }
+        new Thread(() -> {
+            int p = -1;
+            String err = null;
+            try {
+                p = GeekgramPanelProxy.start();
+            } catch (Throwable t) {
+                err = GeekgramNet.describe(t);
+            }
+            final int fp = p;
+            final String fe = err;
+            runOnUiThread(() -> {
+                proxyStarting = false;
+                if (fp > 0) {
+                    usingProxy = true;
+                    if (bottomText != null) {
+                        bottomText.setText("备用通道已就绪");
+                    }
+                    if (webView != null) {
+                        webView.loadUrl("http://127.0.0.1:" + fp + "/login");
+                    }
+                } else {
+                    showError("备用通道没起来：" + (fe == null ? "未知原因" : fe));
+                }
+            });
+        }, "geekgram-panel-proxy-start").start();
+    }
+
+    private void showManualSubDialog() {
+        final EditText edit = new EditText(this);
+        edit.setSingleLine(true);
+        edit.setHint(PANEL_BASE + "/sub/xxxx");
+        String saved = ClashCoreManager.getSubscription();
+        if (!TextUtils.isEmpty(saved)) {
+            edit.setText(saved);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("填订阅链接")
+                .setView(edit)
+                .setPositiveButton("保存并连接", (d, w) -> {
+                    String url = edit.getText() == null ? "" : edit.getText().toString().trim();
+                    if (TextUtils.isEmpty(url) || !(url.startsWith("http://") || url.startsWith("https://"))) {
+                        Toast.makeText(this, "链接要以 http 开头", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    ClashCoreManager.setSubscription(url);
+                    ClashProxyHelper.setAutoEnabled(true);
+                    ClashProxyHelper.applyAsync(true);
+                    Toast.makeText(this, "订阅已保存，正在启动内核…", Toast.LENGTH_SHORT).show();
+                    ClashCoreManager.startAsync(null, true, (ok, error) -> runOnUiThread(() -> {
+                        if (ok) {
+                            Toast.makeText(this, "内核已启动，代理已接管", Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(this, "订阅已保存，内核启动失败："
+                                    + (TextUtils.isEmpty(error) ? "未知原因" : error), Toast.LENGTH_LONG).show();
+                        }
+                    }));
+                    finish();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
     @Override
     public void onBackPressed() {
         if (webView != null && webView.canGoBack()) {
@@ -285,6 +512,12 @@ public class YoyoPanelActivity extends android.app.Activity {
                 webView.removeJavascriptInterface("GeekgramPanel");
                 webView.destroy();
                 webView = null;
+            }
+        } catch (Throwable ignore) {
+        }
+        try {
+            if (usingProxy) {
+                GeekgramPanelProxy.stop();
             }
         } catch (Throwable ignore) {
         }

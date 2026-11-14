@@ -175,6 +175,8 @@ public class GeekgramRevokeCache {
             if (incoming.isEmpty()) {
                 return messages;
             }
+            // 这些是对方撤回、被我们拦下来的消息；打上「已删除」标记，界面上在时间旁边显示
+            GeekgramRevokeMarks.mark(incoming);
             ArrayList<Integer> rest = new ArrayList<>(messages.size());
             for (int a = 0; a < messages.size(); a++) {
                 Integer mid = messages.get(a);
@@ -205,6 +207,8 @@ public class GeekgramRevokeCache {
             Integer id = ids.get(a);
             MessageObject obj = id == null ? null : dict.get(id);
             if (obj != null && obj.messageOwner != null && !obj.messageOwner.out) {
+                // 保留下来的这条打上「已删除」标记
+                GeekgramRevokeMarks.mark(id);
                 continue;
             }
             result.add(id);
