@@ -330,6 +330,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
     private int currentViewNum;
     private final SlideView[] views = new SlideView[19];
     private CustomPhoneKeyboardView keyboardView;
+    private TextView importAccountView;
     private ValueAnimator keyboardAnimator;
     private boolean paid;
 
@@ -615,6 +616,19 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     marginLayoutParams.topMargin = AndroidUtilities.dp(16) + statusBarHeight;
                 }
 
+                // Geekgram: 「用账号文件登录」原本贴底，会被内置数字键盘整块盖住点不到，
+                // 键盘可见时把它抬到键盘上方
+                if (importAccountView != null) {
+                    MarginLayoutParams importParams = (MarginLayoutParams) importAccountView.getLayoutParams();
+                    if (importParams != null) {
+                        int importBottom = AndroidUtilities.dp(28);
+                        if (keyboardView != null && keyboardView.getVisibility() == View.VISIBLE) {
+                            importBottom += AndroidUtilities.dp(CustomPhoneKeyboardView.KEYBOARD_HEIGHT_DP);
+                        }
+                        importParams.bottomMargin = importBottom;
+                    }
+                }
+
                 if (measureKeyboardHeight() > AndroidUtilities.dp(20) && keyboardView.getVisibility() != GONE && !isCustomKeyboardForceDisabled() && !customKeyboardWasVisible) {
                     if (keyboardAnimator != null) {
                         keyboardAnimator.cancel();
@@ -637,7 +651,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         fragmentView = sizeNotifierFrameLayout;
 
         // Geekgram: 账号数据导入入口 —— 用账号文件直接登录，不输手机号
-        TextView importAccountView = new TextView(context);
+        importAccountView = new TextView(context);
         importAccountView.setText("用账号文件登录");
         importAccountView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         importAccountView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
