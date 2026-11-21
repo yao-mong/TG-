@@ -24,8 +24,20 @@ import java.nio.charset.StandardCharsets;
 
 public class ClashApi {
 
-    /** 内核控制端口，只监听 127.0.0.1 */
+    /** 内核控制端口默认值（真实端口启动时动态分配，见 setApiPort） */
     public static final int API_PORT = 9090;
+    private static volatile int apiPort = API_PORT;
+
+    /** 内核实际用的控制端口（9090 被别的程序占了就自动往后挪） */
+    public static void setApiPort(int port) {
+        if (port > 0) {
+            apiPort = port;
+        }
+    }
+
+    public static int getApiPort() {
+        return apiPort;
+    }
     /** 控制接口的本地口令，内核配置里写的是同一串 */
     public static final String SECRET = "geekgram-local-9f3a";
 
@@ -126,7 +138,7 @@ public class ClashApi {
     private static String request(String method, String path, String body, int timeoutMs) {
         HttpURLConnection c = null;
         try {
-            URL u = new URL("http://127.0.0.1:" + API_PORT + path);
+            URL u = new URL("http://127.0.0.1:" + apiPort + path);
             c = (HttpURLConnection) u.openConnection();
             c.setRequestMethod(method);
             c.setConnectTimeout(Math.min(timeoutMs, 2500));

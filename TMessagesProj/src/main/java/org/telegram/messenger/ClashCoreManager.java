@@ -22,6 +22,7 @@ import org.telegram.utils.proxy.ProxySettings;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.Authenticator;
@@ -35,8 +36,11 @@ import java.nio.charset.StandardCharsets;
 
 public class ClashCoreManager {
 
-    /** 本机内核对外开的混合端口（socks5 + http） */
+    /** 本机内核对外开的混合端口（socks5 + http）。这是首选值，实际端口启动时挑空闲的 */
     public static final int MIXED_PORT = 7899;
+
+    /** 上次实际用的混合端口记在这里，App 冷启动时先按它探测内核还在不在 */
+    private static final String PORT_FILE = "mixed.port";
 
     private static final String DIR_NAME = "geekgram_core";
     private static final String SUB_FILE = "sub.yaml";
@@ -54,6 +58,7 @@ public class ClashCoreManager {
     public static final String SOURCE_LOCAL = "local";
 
     private static volatile Process process;
+    private static volatile int mixedPort = 0;
     private static volatile boolean busy = false;
     private static volatile boolean running = false;
     private static volatile String lastError = "";
@@ -346,7 +351,7 @@ public class ClashCoreManager {
     private static boolean probePort() {
         Socket socket = new Socket();
         try {
-            socket.connect(new InetSocketAddress("127.0.0.1", MIXED_PORT), 180);
+            socket.connect(new InetSocketAddress("127.0.0.1", activePort()), 180);
             running = true;
             return true;
         } catch (Throwable t) {
@@ -393,7 +398,7 @@ public class ClashCoreManager {
             return "启动中…";
         }
         if (isRunning()) {
-            return "运行中 · 127.0.0.1:" + MIXED_PORT;
+            return "运行中 · 127.0.0.1:" + activePort();
         }
         if (!TextUtils.isEmpty(lastError)) {
             return "未运行（" + lastError + "）";
@@ -448,6 +453,7 @@ public class ClashCoreManager {
                                 }
                             }
                         }
+                        preparePorts();
                         writeConfig();
                         launch();
                         ok = waitPort(20000);
@@ -470,7 +476,7 @@ public class ClashCoreManager {
                     if (fok) {
                         running = true;
                         lastError = "";
-                        ClashProxyHelper.applyPort(MIXED_PORT, true);
+                        ClashProxyHelper.applyPort(activePort(), true);
                         startWatchdog();
                     }
                     if (callback != null) {
@@ -521,13 +527,155 @@ public class ClashCoreManager {
 
     /** 启动时静默调用：配好了就后台把内核拉起来，失败不打扰用户 */
     public static void autoStart() {
-        if (!ClashProxyHelper.isAutoEnabled() || !isConfigured() || busy || isRunning()) {
+        if (!ClashProxyHelper.isAutoEnabled() || !isConfigured() || busy) {
+            return;
+        }
+        if (isRunning()) {
+            // 内核已经活着（可能是上次没退干净的），直接把 Telegram 的代理指过去，不用再起一个
+            AndroidUtilities.runOnUIThread(() -> ClashProxyHelper.applyPort(activePort(), false));
+            startWatchdog();
             return;
         }
         startAsync(null, false, null);
     }
 
     // ------------------------------------------------------------ 内部实现
+
+    /** 当前实际使用的混合端口；冷启动时先看上回记下的，没有就用默认值 */
+    public static int activePort() {
+        int p = mixedPort;
+        if (p > 0) {
+            return p;
+        }
+        try {
+            File f = new File(dir(), PORT_FILE);
+            if (f.exists()) {
+                int v = Integer.parseInt(readAll(new FileInputStream(f)).trim());
+                if (v > 0) {
+                    mixedPort = v;
+                    return v;
+                }
+            }
+        } catch (Throwable ignore) {
+        }
+        return MIXED_PORT;
+    }
+
+    private static boolean portFree(int port) {
+        java.net.ServerSocket ss = null;
+        try {
+            ss = new java.net.ServerSocket();
+            ss.setReuseAddress(false);
+            ss.bind(new java.net.InetSocketAddress("127.0.0.1", port));
+            return true;
+        } catch (Throwable t) {
+            return false;
+        } finally {
+            try {
+                if (ss != null) {
+                    ss.close();
+                }
+            } catch (Throwable ignore) {
+            }
+        }
+    }
+
+    /** 从 from 开始往后挑一个空闲端口，避开 avoid */
+    private static int pickPort(int from, int span, int avoid) {
+        for (int i = 0; i < span; i++) {
+            int p = from + i;
+            if (p == avoid) {
+                continue;
+            }
+            if (portFree(p)) {
+                return p;
+            }
+        }
+        return -1;
+    }
+
+    /** pid 是不是我们自己那个内核（按 /proc/<pid>/cmdline 认，别误杀别的程序） */
+    private static boolean isOurCorePid(String pid) {
+        if (TextUtils.isEmpty(pid)) {
+            return false;
+        }
+        try {
+            String cmdline = readAll(new FileInputStream("/proc/" + pid.trim() + "/cmdline"));
+            return cmdline.contains("libclashcore") || cmdline.contains("clash");
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * 清掉上一次残留的内核。App 被划掉 / 被系统回收时子进程可能还活着，
+     * 端口就一直被它占着，下次启动直接 bind: address already in use。
+     */
+    private static void killStaleCore() {
+        Process p = process;
+        process = null;
+        if (p != null) {
+            try {
+                long pid = pidOf(p);
+                if (pid > 0) {
+                    Runtime.getRuntime().exec(new String[]{"kill", "-9", String.valueOf(pid)});
+                }
+            } catch (Throwable ignore) {
+            }
+            try {
+                p.destroy();
+            } catch (Throwable ignore) {
+            }
+        }
+        try {
+            File pidFile = new File(dir(), PID_FILE);
+            if (pidFile.exists()) {
+                String pid = readAll(new FileInputStream(pidFile)).trim();
+                if (isOurCorePid(pid)) {
+                    Runtime.getRuntime().exec(new String[]{"kill", "-9", pid});
+                }
+                //noinspection ResultOfMethodCallIgnored
+                pidFile.delete();
+            }
+        } catch (Throwable ignore) {
+        }
+        // 给它一点时间把端口交出来
+        for (int i = 0; i < 6 && !portFree(activePort()); i++) {
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException ignore) {
+                break;
+            }
+        }
+    }
+
+    /** 启动前定端口：清残留 → 挑两个空闲端口 → 记下来，控制接口跟着切 */
+    private static void preparePorts() {
+        killStaleCore();
+        int mix = pickPort(MIXED_PORT, 40, -1);
+        if (mix <= 0) {
+            mix = MIXED_PORT;
+        }
+        int api = pickPort(ClashApi.API_PORT, 40, mix);
+        if (api <= 0) {
+            api = ClashApi.API_PORT;
+        }
+        mixedPort = mix;
+        ClashApi.setApiPort(api);
+        try {
+            FileOutputStream out = new FileOutputStream(new File(dir(), PORT_FILE));
+            try {
+                out.write(String.valueOf(mix).getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            } finally {
+                try {
+                    out.close();
+                } catch (Throwable ignore) {
+                }
+            }
+        } catch (Throwable ignore) {
+        }
+    }
 
     // ------------------------------------------------------------ 连接守护
 
@@ -576,6 +724,8 @@ public class ClashCoreManager {
                     }
                     restartCount++;
                     try {
+                        // 内核没了：可能端口被别的程序抢了，重新挑一次再起
+                        preparePorts();
                         writeConfig();
                         launch();
                         if (waitPort(20000)) {
@@ -632,10 +782,10 @@ public class ClashCoreManager {
                 return;
             }
             boolean enabled = MessagesController.getGlobalMainSettings().getBoolean("proxy_enabled", false);
-            if (enabled && ClashProxyHelper.detectedPort == MIXED_PORT) {
+            if (enabled && ClashProxyHelper.detectedPort == activePort() && mixedPort > 0) {
                 return;
             }
-            AndroidUtilities.runOnUIThread(() -> ClashProxyHelper.applyPort(MIXED_PORT, false));
+            AndroidUtilities.runOnUIThread(() -> ClashProxyHelper.applyPort(activePort(), false));
         } catch (Throwable ignore) {
         }
     }
@@ -643,7 +793,7 @@ public class ClashCoreManager {
     private static boolean probeQuiet() {
         Socket socket = new Socket();
         try {
-            socket.connect(new InetSocketAddress("127.0.0.1", MIXED_PORT), 300);
+            socket.connect(new InetSocketAddress("127.0.0.1", activePort()), 300);
             return true;
         } catch (Throwable t) {
             return false;
@@ -801,7 +951,7 @@ public class ClashCoreManager {
 
     private static void writeConfig() throws Exception {
         StringBuilder sb = new StringBuilder();
-        sb.append("mixed-port: ").append(MIXED_PORT).append('\n');
+        sb.append("mixed-port: ").append(mixedPort > 0 ? mixedPort : MIXED_PORT).append('\n');
         sb.append("allow-lan: false\n");
         sb.append("bind-address: 127.0.0.1\n");
         sb.append("mode: rule\n");
@@ -1013,7 +1163,7 @@ public class ClashCoreManager {
         while (System.currentTimeMillis() < end) {
             Socket socket = new Socket();
             try {
-                socket.connect(new InetSocketAddress("127.0.0.1", MIXED_PORT), 250);
+                socket.connect(new InetSocketAddress("127.0.0.1", mixedPort), 250);
                 return true;
             } catch (Throwable ignore) {
             } finally {

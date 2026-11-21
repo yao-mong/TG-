@@ -1,6 +1,8 @@
 package org.telegram.ui;
 
 import android.app.Activity;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -45,94 +47,71 @@ public class AccountDataImportActivity extends Activity {
     private final ArrayList<Uri> picked = new ArrayList<>();
     private TextView pickedView;
     private TextView logView;
+    private TextView pickValue;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        GeekgramUi.applySystemBars(this);
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(0xff1c1c1e);
-        root.setPadding(dp(18), dp(24), dp(18), dp(18));
+        GeekgramUi.Screen screen = GeekgramUi.screen(this, "用账号文件登录", this::finish);
+        setContentView(screen.root);
 
-        TextView title = new TextView(this);
-        title.setText("用账号文件登录");
-        title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22);
-        title.setTextColor(0xffffffff);
-        root.addView(title);
+        GeekgramUi.section(screen.content, "说明");
+        LinearLayout info = GeekgramUi.card(this);
+        info.addView(GeekgramUi.note(this,
+                "选 Telegram 的账号数据文件导进来，重启后直接进已登录状态。\n\n"
+                        + "需要的文件（一般在 /data/data/<包名>/files/ 下）：\n"
+                        + "· tgnet.dat\n"
+                        + "· dc1conf.dat ~ dc5conf.dat\n"
+                        + "· userconfig.xml（在 /data/data/<包名>/shared_prefs/ 下）\n\n"
+                        + "也可以直接选一个装着这些文件的 zip 包。导入会覆盖当前这份数据的登录状态，"
+                        + "当前没登录才建议用。"));
+        GeekgramUi.addCard(screen.content, info, 0);
 
-        TextView desc = new TextView(this);
-        desc.setText("选 Telegram 的账号数据文件导进来，重启后直接进已登录状态。\n\n"
-                + "需要的文件（一般在 /data/data/<包名>/files/ 下）：\n"
-                + "· tgnet.dat\n"
-                + "· dc1conf.dat ~ dc5conf.dat\n"
-                + "· userconfig.xml（在 /data/data/<包名>/shared_prefs/ 下）\n\n"
-                + "也可以直接选一个装着这些文件的 zip 包。\n"
-                + "导入会覆盖当前这份数据的登录状态，当前没登录才建议用。");
-        desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        desc.setTextColor(0xff9a9a9e);
-        desc.setLineSpacing(dp(4), 1f);
-        desc.setPadding(0, dp(12), 0, dp(12));
-        root.addView(desc);
+        GeekgramUi.section(screen.content, "账号数据");
+        LinearLayout files = GeekgramUi.card(this);
+        pickValue = GeekgramUi.addAction(files, "选择账号数据文件", "未选", GeekgramUi.accent(), true,
+                v -> pickFiles());
+        pickedView = GeekgramUi.note(this, "还没选文件");
+        files.addView(pickedView);
+        GeekgramUi.addCard(screen.content, files, 0);
 
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        root.addView(scroll, slp);
+        TextView doImport = GeekgramUi.primaryButton(this, "开始导入", v -> runImport());
+        LinearLayout.LayoutParams importParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        importParams.topMargin = dp(16);
+        screen.content.addView(doImport, importParams);
 
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(box);
+        GeekgramUi.section(screen.content, "导入日志");
+        LinearLayout logs = GeekgramUi.card(this);
+        logView = GeekgramUi.mono(this, "");
+        logs.addView(logView);
+        GeekgramUi.addCard(screen.content, logs, 0);
 
-        pickedView = new TextView(this);
-        pickedView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        pickedView.setTextColor(0xffd0d0d4);
-        pickedView.setPadding(0, dp(6), 0, dp(10));
-        pickedView.setText("还没选文件");
-        box.addView(pickedView);
-
-        logView = new TextView(this);
-        logView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        logView.setTextColor(0xff8ab4f8);
-        logView.setPadding(0, dp(6), 0, dp(10));
-        box.addView(logView);
-
-        Button pick = new Button(this);
-        pick.setText("选择账号数据文件");
-        pick.setOnClickListener(v -> {
-            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("*/*");
-            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-            try {
-                startActivityForResult(intent, REQ_PICK);
-            } catch (Throwable e) {
-                Toast.makeText(this, "打不开文件选择器", Toast.LENGTH_SHORT).show();
-            }
-        });
-        root.addView(pick, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        Button doImport = new Button(this);
-        doImport.setText("开始导入");
-        doImport.setOnClickListener(v -> runImport());
-        root.addView(doImport, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        Button restart = new Button(this);
-        restart.setText("重启 Geekgram");
-        restart.setOnClickListener(v -> restartApp());
-        root.addView(restart, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        Button export = new Button(this);
-        export.setText("导出当前账号数据（zip）");
-        export.setOnClickListener(v -> {
+        GeekgramUi.section(screen.content, "其他");
+        LinearLayout others = GeekgramUi.card(this);
+        GeekgramUi.addAction(others, "重启 Geekgram", GeekgramUi.accent(), true, v -> restartApp());
+        GeekgramUi.addAction(others, "导出当前账号数据（zip）", GeekgramUi.accent(), false, v -> {
             try {
                 startActivity(new Intent(this, AccountDataExportActivity.class));
             } catch (Throwable e) {
                 Toast.makeText(this, "打不开导出页", Toast.LENGTH_SHORT).show();
             }
         });
-        root.addView(export, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        GeekgramUi.addCard(screen.content, others, 0);
+    }
 
-        setContentView(root);
+    private void pickFiles() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        try {
+            startActivityForResult(intent, REQ_PICK);
+        } catch (Throwable e) {
+            Toast.makeText(this, "打不开文件选择器", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private int dp(float v) {
@@ -159,6 +138,9 @@ public class AccountDataImportActivity extends Activity {
             sb.append("· ").append(displayName(uri)).append('\n');
         }
         pickedView.setText(sb.toString());
+        if (pickValue != null) {
+            pickValue.setText("已选 " + picked.size() + " 个");
+        }
     }
 
     private String displayName(Uri uri) {
@@ -374,50 +356,79 @@ public class AccountDataImportActivity extends Activity {
     }
 
     private boolean importUserConfig(InputStream in) {
+        int count = 0;
+        int bad = 0;
         try {
             SharedPreferences prefs = ApplicationLoader.applicationContext.getSharedPreferences("userconfing", Context.MODE_PRIVATE);
             SharedPreferences.Editor editor = prefs.edit();
             XmlPullParser parser = Xml.newPullParser();
             parser.setInput(in, "UTF-8");
-            int count = 0;
             int eventType = parser.getEventType();
             while (eventType != XmlPullParser.END_DOCUMENT) {
                 if (eventType == XmlPullParser.START_TAG) {
                     String tag = parser.getName();
                     String key = parser.getAttributeValue(null, "name");
-                    String value = parser.nextText();
-                    if (key != null && value != null) {
-                        if ("string".equals(tag)) {
-                            editor.putString(key, value);
-                            count++;
-                        } else if ("int".equals(tag)) {
-                            try {
-                                editor.putInt(key, Integer.parseInt(value.trim()));
+                    if (key != null) {
+                        try {
+                            if ("set".equals(tag)) {
+                                java.util.HashSet<String> set = new java.util.HashSet<>();
+                                int depth = parser.getDepth();
+                                while (true) {
+                                    int inner = parser.next();
+                                    if (inner == XmlPullParser.END_DOCUMENT) {
+                                        break;
+                                    }
+                                    if (inner == XmlPullParser.END_TAG && parser.getDepth() == depth) {
+                                        break;
+                                    }
+                                    if (inner == XmlPullParser.START_TAG && "string".equals(parser.getName())) {
+                                        set.add(parser.nextText());
+                                    }
+                                }
+                                editor.putStringSet(key, set);
                                 count++;
-                            } catch (Throwable ignore) {
-                            }
-                        } else if ("long".equals(tag)) {
-                            try {
-                                editor.putLong(key, Long.parseLong(value.trim()));
+                            } else if ("string".equals(tag)) {
+                                String v = parser.getAttributeValue(null, "value");
+                                if (v == null) {
+                                    v = parser.nextText();
+                                }
+                                editor.putString(key, v);
                                 count++;
-                            } catch (Throwable ignore) {
-                            }
-                        } else if ("boolean".equals(tag)) {
-                            editor.putBoolean(key, "true".equalsIgnoreCase(value.trim()));
-                            count++;
-                        } else if ("float".equals(tag)) {
-                            try {
-                                editor.putFloat(key, Float.parseFloat(value.trim()));
+                            } else if ("int".equals(tag) || "long".equals(tag)
+                                    || "float".equals(tag) || "boolean".equals(tag)) {
+                                // Android 的 int/long/float/boolean 是属性写法 <long name="x" value="0"/>，
+                                // 没有文本节点。以前统一用 nextText() 读，一碰这类标签就抛
+                                // END_TAG expected，整份配置解析中断，一项都没写进去。
+                                String v = parser.getAttributeValue(null, "value");
+                                if (v == null) {
+                                    v = parser.nextText();
+                                }
+                                String t = v.trim();
+                                if ("int".equals(tag)) {
+                                    editor.putInt(key, Integer.parseInt(t));
+                                } else if ("long".equals(tag)) {
+                                    editor.putLong(key, Long.parseLong(t));
+                                } else if ("float".equals(tag)) {
+                                    editor.putFloat(key, Float.parseFloat(t));
+                                } else {
+                                    editor.putBoolean(key, "true".equalsIgnoreCase(t) || "1".equals(t));
+                                }
                                 count++;
-                            } catch (Throwable ignore) {
                             }
+                        } catch (Throwable perItem) {
+                            // 单项不认识就跳过，别让它把整份配置带崩
+                            bad++;
+                            FileLog.e(perItem);
                         }
                     }
                 }
                 eventType = parser.next();
             }
-            editor.commit();
-            log("账号配置已写入：" + count + " 项");
+            if (!editor.commit()) {
+                log("账号配置写入失败（旧数据冲突），先清除应用数据再导入");
+                return false;
+            }
+            log("账号配置已写入：" + count + " 项" + (bad > 0 ? "（跳过 " + bad + " 项）" : ""));
             return count > 0;
         } catch (Throwable e) {
             FileLog.e(e);
@@ -427,11 +438,23 @@ public class AccountDataImportActivity extends Activity {
     }
 
     private void restartApp() {
+        // 必须先杀掉进程：UserConfig 在进程启动时就把账号配置读进内存了，
+        // 在同一个进程里 startActivity 读到的还是旧值，等于没重启。
         try {
-            Intent intent = new Intent(this, LaunchActivity.class);
+            Context app = getApplicationContext();
+            Intent intent = new Intent(app, LaunchActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            startActivity(intent);
-        } catch (Throwable ignore) {
+            int flags = PendingIntent.FLAG_CANCEL_CURRENT;
+            if (android.os.Build.VERSION.SDK_INT >= 23) {
+                flags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pi = PendingIntent.getActivity(app, 7711, intent, flags);
+            AlarmManager am = (AlarmManager) app.getSystemService(Context.ALARM_SERVICE);
+            if (am != null) {
+                am.set(AlarmManager.RTC, System.currentTimeMillis() + 800, pi);
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
         }
         finishAffinity();
         android.os.Process.killProcess(android.os.Process.myPid());

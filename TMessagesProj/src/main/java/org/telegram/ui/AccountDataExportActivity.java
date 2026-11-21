@@ -39,7 +39,7 @@ public class AccountDataExportActivity extends Activity {
     private final ArrayList<Item> items = new ArrayList<>();
     private TextView listView;
     private TextView logView;
-    private Button exportBtn;
+    private TextView exportBtn;
 
     private static class Item {
         final File file;
@@ -56,64 +56,48 @@ public class AccountDataExportActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        GeekgramUi.applySystemBars(this);
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(0xff1c1c1e);
-        root.setPadding(dp(18), dp(24), dp(18), dp(18));
+        GeekgramUi.Screen screen = GeekgramUi.screen(this, "导出账号数据", this::finish);
+        setContentView(screen.root);
 
-        TextView title = new TextView(this);
-        title.setText("导出账号数据");
-        title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22);
-        title.setTextColor(0xffffffff);
-        root.addView(title);
+        GeekgramUi.section(screen.content, "说明");
+        LinearLayout info = GeekgramUi.card(this);
+        info.addView(GeekgramUi.note(this,
+                "把本机当前账号的数据打成一个 zip，存到你手机上任何位置。\n\n"
+                        + "导出的包里有：\n"
+                        + "· tgnet.dat / dcNconf.dat（登录凭据与节点配置）\n"
+                        + "· userconfig.xml（账号配置）\n\n"
+                        + "换台手机装 Geekgram → 登录页「用账号文件登录」→ 选这个 zip，不用输验证码就能进。\n"
+                        + "导出的包等于账号钥匙，别发给别人。"));
+        GeekgramUi.addCard(screen.content, info, 0);
 
-        TextView desc = new TextView(this);
-        desc.setText("把本机当前账号的数据打成一个 zip，存到你手机上任何位置。\n\n"
-                + "导出的包里有：\n"
-                + "· tgnet.dat / dcNconf.dat（登录凭据与节点配置）\n"
-                + "· userconfig.xml（账号配置）\n\n"
-                + "换台手机装 Geekgram 测试版 → 登录页「用账号文件登录」→ 选这个 zip，"
-                + "不用输验证码就能进已登录状态。\n"
-                + "导出的包等于账号钥匙，别发给别人。");
-        desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        desc.setTextColor(0xff9a9a9e);
-        desc.setLineSpacing(dp(4), 1f);
-        desc.setPadding(0, dp(12), 0, dp(12));
-        root.addView(desc);
+        GeekgramUi.section(screen.content, "本机账号数据");
+        LinearLayout files = GeekgramUi.card(this);
+        listView = GeekgramUi.note(this, "正在扫描账号数据…");
+        files.addView(listView);
+        GeekgramUi.addCard(screen.content, files, 0);
 
-        ScrollView scroll = new ScrollView(this);
-        root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(box);
-
-        listView = new TextView(this);
-        listView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        listView.setTextColor(0xffd0d0d4);
-        listView.setText("正在扫描账号数据…");
-        listView.setPadding(0, dp(6), 0, dp(10));
-        box.addView(listView);
-
-        logView = new TextView(this);
-        logView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        logView.setTextColor(0xff8ab4f8);
-        logView.setPadding(0, dp(6), 0, dp(10));
-        box.addView(logView);
-
-        exportBtn = new Button(this);
-        exportBtn.setText("导出为 zip");
+        exportBtn = GeekgramUi.primaryButton(this, "导出为 zip", v -> startCreate());
         exportBtn.setEnabled(false);
-        exportBtn.setOnClickListener(v -> startCreate());
-        root.addView(exportBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            exportBtn.setAlpha(0.45f);
+        LinearLayout.LayoutParams exportParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        exportParams.topMargin = dp(16);
+        screen.content.addView(exportBtn, exportParams);
 
-        Button rescan = new Button(this);
-        rescan.setText("重新扫描");
-        rescan.setOnClickListener(v -> scanAsync());
-        root.addView(rescan, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        GeekgramUi.section(screen.content, "其他");
+        LinearLayout others = GeekgramUi.card(this);
+        GeekgramUi.addAction(others, "重新扫描", GeekgramUi.accent(), false, v -> scanAsync());
+        GeekgramUi.addCard(screen.content, others, 0);
 
-        setContentView(root);
+        GeekgramUi.section(screen.content, "导出日志");
+        LinearLayout logs = GeekgramUi.card(this);
+        logView = GeekgramUi.mono(this, "");
+        logs.addView(logView);
+        GeekgramUi.addCard(screen.content, logs, 0);
+
+        setBtnEnabled();
         scanAsync();
     }
 
@@ -151,7 +135,7 @@ public class AccountDataExportActivity extends Activity {
                     sb.append("\n合计 ").append(readable(total));
                 }
                 listView.setText(sb.toString());
-                exportBtn.setEnabled(!items.isEmpty());
+                setBtnEnabled();
             });
         }).start();
     }
@@ -323,13 +307,17 @@ public class AccountDataExportActivity extends Activity {
                     appendLog("这个 zip 收好。换机登录时用「用账号文件登录」选它就行。");
                     Toast.makeText(this, "已导出 " + fok + " 个文件", Toast.LENGTH_LONG).show();
                 }
-                exportBtn.setEnabled(!items.isEmpty());
+                setBtnEnabled();
             });
         }).start();
     }
 
     private void setBtnEnabled() {
-        runOnUiThread(() -> exportBtn.setEnabled(!items.isEmpty()));
+        runOnUiThread(() -> {
+            boolean can = !items.isEmpty();
+            exportBtn.setEnabled(can);
+            exportBtn.setAlpha(can ? 1f : 0.45f);
+        });
     }
 
     private void appendLog(String line) {

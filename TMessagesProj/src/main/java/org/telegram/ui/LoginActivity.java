@@ -654,21 +654,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         // Geekgram: 账号数据导入入口 —— 用账号文件直接登录，不输手机号
         importAccountView = new TextView(context);
         importAccountView.setText("用账号文件登录");
-        importAccountView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        importAccountView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+        // 跟 Telegram 登录页底部的文字按钮保持一致：蓝色、无边框、点按有回弹
+        importAccountView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+        importAccountView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
         importAccountView.setGravity(Gravity.CENTER);
-        importAccountView.setPadding(AndroidUtilities.dp(18), AndroidUtilities.dp(11), AndroidUtilities.dp(18), AndroidUtilities.dp(11));
+        importAccountView.setPadding(AndroidUtilities.dp(18), AndroidUtilities.dp(12), AndroidUtilities.dp(18), AndroidUtilities.dp(12));
         importAccountView.setClickable(true);
         importAccountView.setFocusable(true);
         try {
-            GradientDrawable importBg = new GradientDrawable();
-            importBg.setCornerRadius(AndroidUtilities.dp(18));
-            importBg.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
-            importBg.setStroke(AndroidUtilities.dp(1), Theme.getColor(Theme.key_divider));
-            importAccountView.setBackground(importBg);
+            importAccountView.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)));
         } catch (Throwable ignore) {
         }
-        importAccountView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
         importAccountView.setOnClickListener(v -> {
             try {
                 Intent importIntent = new Intent(ApplicationLoader.applicationContext, AccountDataImportActivity.class);
