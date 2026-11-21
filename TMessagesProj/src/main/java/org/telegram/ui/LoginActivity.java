@@ -45,6 +45,7 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Build;
@@ -656,7 +657,18 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         importAccountView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         importAccountView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
         importAccountView.setGravity(Gravity.CENTER);
-        importAccountView.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(10), AndroidUtilities.dp(16), AndroidUtilities.dp(10));
+        importAccountView.setPadding(AndroidUtilities.dp(18), AndroidUtilities.dp(11), AndroidUtilities.dp(18), AndroidUtilities.dp(11));
+        importAccountView.setClickable(true);
+        importAccountView.setFocusable(true);
+        try {
+            GradientDrawable importBg = new GradientDrawable();
+            importBg.setCornerRadius(AndroidUtilities.dp(18));
+            importBg.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
+            importBg.setStroke(AndroidUtilities.dp(1), Theme.getColor(Theme.key_divider));
+            importAccountView.setBackground(importBg);
+        } catch (Throwable ignore) {
+        }
+        importAccountView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
         importAccountView.setOnClickListener(v -> {
             try {
                 Intent importIntent = new Intent(ApplicationLoader.applicationContext, AccountDataImportActivity.class);
@@ -835,6 +847,12 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         radialProgressView.setScaleX(0.1f);
         radialProgressView.setScaleY(0.1f);
         sizeNotifierFrameLayout.addView(radialProgressView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 0, 16, 16, 0));
+
+        // Geekgram: 「用账号文件登录」原来加在 ScrollView 之前，层级在整页滚动视图下面，
+        // 看得见但摸不到 —— 触摸全被上面那层吃掉。这里把它提到最上层，点击才真正到得了。
+        if (importAccountView != null) {
+            importAccountView.bringToFront();
+        }
 
         floatingButtonIcon = new TransformableLoginButtonView(context);
         floatingButtonIcon.setTransformType(TransformableLoginButtonView.TRANSFORM_OPEN_ARROW);
