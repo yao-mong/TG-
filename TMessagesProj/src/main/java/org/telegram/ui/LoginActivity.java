@@ -332,7 +332,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
     private int currentViewNum;
     private final SlideView[] views = new SlideView[19];
     private CustomPhoneKeyboardView keyboardView;
-    private TextView importAccountView;
+    private TextView fileLoginButton;
+    private TextView fileLoginHint;
     private ValueAnimator keyboardAnimator;
     private boolean paid;
 
@@ -630,19 +631,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     marginLayoutParams.topMargin = AndroidUtilities.dp(16) + statusBarHeight;
                 }
 
-                // Geekgram: 「用账号文件登录」原本贴底，会被内置数字键盘整块盖住点不到，
-                // 键盘可见时把它抬到键盘上方
-                if (importAccountView != null) {
-                    MarginLayoutParams importParams = (MarginLayoutParams) importAccountView.getLayoutParams();
-                    if (importParams != null) {
-                        int importBottom = AndroidUtilities.dp(28);
-                        if (keyboardView != null && keyboardView.getVisibility() == View.VISIBLE) {
-                            importBottom += AndroidUtilities.dp(CustomPhoneKeyboardView.KEYBOARD_HEIGHT_DP);
-                        }
-                        importParams.bottomMargin = importBottom;
-                    }
-                }
-
                 if (measureKeyboardHeight() > AndroidUtilities.dp(20) && keyboardView.getVisibility() != GONE && !isCustomKeyboardForceDisabled() && !customKeyboardWasVisible) {
                     if (keyboardAnimator != null) {
                         keyboardAnimator.cancel();
@@ -663,32 +651,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             }
         });
         fragmentView = sizeNotifierFrameLayout;
-
-        // Geekgram: 账号数据导入入口 —— 用账号文件直接登录，不输手机号
-        importAccountView = new TextView(context);
-        importAccountView.setText("用账号文件登录");
-        // 跟 Telegram 登录页底部的文字按钮保持一致：蓝色、无边框、点按有回弹
-        importAccountView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-        importAccountView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
-        importAccountView.setGravity(Gravity.CENTER);
-        importAccountView.setPadding(AndroidUtilities.dp(18), AndroidUtilities.dp(12), AndroidUtilities.dp(18), AndroidUtilities.dp(12));
-        importAccountView.setClickable(true);
-        importAccountView.setFocusable(true);
-        try {
-            importAccountView.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)));
-        } catch (Throwable ignore) {
-        }
-        importAccountView.setOnClickListener(v -> {
-            try {
-                Intent importIntent = new Intent(ApplicationLoader.applicationContext, AccountDataImportActivity.class);
-                importIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                ApplicationLoader.applicationContext.startActivity(importIntent);
-            } catch (Throwable e) {
-                FileLog.e(e);
-                Toast.makeText(getParentActivity(), "打不开导入界面", Toast.LENGTH_SHORT).show();
-            }
-        });
-        sizeNotifierFrameLayout.addView(importAccountView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL), 0, 0, 0, 28));
 
         ScrollView scrollView = new ScrollView(context) {
             @Override
@@ -856,12 +818,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         radialProgressView.setScaleX(0.1f);
         radialProgressView.setScaleY(0.1f);
         sizeNotifierFrameLayout.addView(radialProgressView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 0, 16, 16, 0));
-
-        // Geekgram: 「用账号文件登录」原来加在 ScrollView 之前，层级在整页滚动视图下面，
-        // 看得见但摸不到 —— 触摸全被上面那层吃掉。这里把它提到最上层，点击才真正到得了。
-        if (importAccountView != null) {
-            importAccountView.bringToFront();
-        }
 
         floatingButtonIcon = new TransformableLoginButtonView(context);
         floatingButtonIcon.setTransformType(TransformableLoginButtonView.TRANSFORM_OPEN_ARROW);
@@ -2047,6 +2003,20 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         }
     }
 
+    // Geekgram: 打开账号文件导入界面（登录页入口 / 各页面公用）
+    private void openAccountFileImport() {
+        try {
+            Intent importIntent = new Intent(ApplicationLoader.applicationContext, AccountDataImportActivity.class);
+            importIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ApplicationLoader.applicationContext.startActivity(importIntent);
+        } catch (Throwable e) {
+            FileLog.e(e);
+            if (getParentActivity() != null) {
+                Toast.makeText(getParentActivity(), "打不开导入界面", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
     private TLRPC.TL_help_termsOfService currentTermsOfService;
 
     public class PhoneView extends SlideView implements AdapterView.OnItemSelectedListener, NotificationCenter.NotificationCenterDelegate {
@@ -2550,6 +2520,35 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 return false;
             });
 
+            // Geekgram: 登录页直接摆出「用账号文件登录」入口 —— 不输手机号、不接验证码
+            fileLoginButton = new TextView(context);
+            fileLoginButton.setText("用账号文件登录");
+            fileLoginButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+            fileLoginButton.setTypeface(AndroidUtilities.bold());
+            fileLoginButton.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
+            fileLoginButton.setGravity(Gravity.CENTER);
+            fileLoginButton.setClickable(true);
+            fileLoginButton.setFocusable(true);
+            fileLoginButton.setPadding(dp(16), 0, dp(16), 0);
+            try {
+                GradientDrawable fileLoginBg = new GradientDrawable();
+                fileLoginBg.setCornerRadius(dp(10));
+                fileLoginBg.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
+                fileLoginBg.setStroke(Math.max(1, dp(0.5f)), Theme.getColor(Theme.key_divider));
+                fileLoginButton.setBackground(fileLoginBg);
+            } catch (Throwable ignore) {
+            }
+            fileLoginButton.setOnClickListener(v -> openAccountFileImport());
+            addView(fileLoginButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, Gravity.CENTER_HORIZONTAL, 16, 20, 16, 0));
+
+            fileLoginHint = new TextView(context);
+            fileLoginHint.setText("选手机导出的账号文件，直接恢复到已登录");
+            fileLoginHint.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            fileLoginHint.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+            fileLoginHint.setGravity(Gravity.CENTER);
+            fileLoginHint.setLineSpacing(dp(2), 1f);
+            addView(fileLoginHint, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 16, 8, 16, 0));
+
             int bottomMargin = 72;
             if (newAccount && activityMode == MODE_LOGIN) {
                 syncContactsBox = new CheckBoxCell(context, 2);
@@ -2800,6 +2799,21 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
             phoneOutlineView.updateColor();
             countryOutlineView.updateColor();
+
+            if (fileLoginButton != null) {
+                fileLoginButton.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
+                try {
+                    GradientDrawable fileLoginBg = new GradientDrawable();
+                    fileLoginBg.setCornerRadius(dp(10));
+                    fileLoginBg.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
+                    fileLoginBg.setStroke(Math.max(1, dp(0.5f)), Theme.getColor(Theme.key_divider));
+                    fileLoginButton.setBackground(fileLoginBg);
+                } catch (Throwable ignore) {
+                }
+            }
+            if (fileLoginHint != null) {
+                fileLoginHint.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+            }
         }
 
         @Override

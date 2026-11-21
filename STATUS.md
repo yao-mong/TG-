@@ -114,3 +114,24 @@ versionCode 73149 / versionName 13.2.7 / 包名 com.geekrem.messenger
   d221217b39893021519b4efdd7e56c859ac541e80f1629a848543e8286526fd4(与 v19 一致,可覆盖安装)
   dex 内字符串核对:账号配置已写入 / 已选 / 内核 / 订阅 / mixed.port / libclashcore / 先清除应用数据再导入 全部命中
 - APK:output/Geekgram-13.3.4-beta-73219.apk + 安装说明
+
+## Geekgram 测试版 v21(2026-11-21)
+- 13.3.6-beta / 73239(APP_VERSION_CODE=7323),包名 com.geekrem.messenger.beta,分支 geekgram-beta
+- 用户要求:登录页直接显示「用账号文件登录」即可,验证码那几页不用管
+- 问题:旧入口是贴在 sizeNotifierFrameLayout 底部的悬浮 TextView(BOTTOM|CENTER,bottomMargin 28+键盘高),
+  在代码页与该页文字重叠渲染成一团乱码,且与页面内容抢位置
+- 改法:删掉悬浮 TextView 及其 onMeasure 抬升、bringToFront 逻辑;
+  在 PhoneView 构造里(手机号输入框之后、同步联系人之前)加实体按钮 fileLoginButton
+  (MATCH_PARENT × 48dp、圆角 10dp、windowBackgroundGray 底 + divider 描边、BlueText4 加粗文字)
+  + 一行提示 fileLoginHint(「选手机导出的账号文件，直接恢复到已登录」);
+  点击统一走新增的 openAccountFileImport();updateColors() 里同步刷新按钮配色(夜间模式不冒白底)
+- 构建环境(本轮重建,ws/home 缓存为空):
+  local.properties sdk.dir=/opt/deepbot-toolchain/android-sdk + ndk.dir=.../ndk/27.2.12479018(含 build/)
+  JAVA_HOME=/opt/deepbot-toolchain/jdk-17.0.21+9 GRADLE_USER_HOME=ws/home
+  ANDROID_SDK_ROOT=/opt/deepbot-toolchain/android-sdk ./gradlew :TMessagesProj_App:assembleAfatRelease
+  BUILD SUCCESSFUL 17m03s
+- 验证:aapt2 badging versionCode 73239 / versionName 13.3.6-beta / arm64-v8a;
+  apksigner SHA-256 d221217b39893021519b4efdd7e56c859ac541e80f1629a848543e8286526fd4(同前,可覆盖安装);
+  dex 内命中「用账号文件登录」「选手机导出的账号文件，直接恢复到已登录」「打不开导入界面」
+- APK:output/Geekgram-13.3.6-beta-73239.apk + 安装说明
+- 未在真机运行(沙箱无设备)
