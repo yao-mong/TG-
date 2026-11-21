@@ -23,6 +23,7 @@ import android.widget.Toast;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.GeekgramAccountImport;
 import org.telegram.messenger.FileLog;
 import org.xmlpull.v1.XmlPullParser;
 
@@ -61,14 +62,15 @@ public class AccountDataImportActivity extends Activity {
         GeekgramUi.section(screen.content, "说明");
         LinearLayout info = GeekgramUi.card(this);
         info.addView(GeekgramUi.note(this,
-                "选 Telegram 的账号数据文件导进来，重启后直接进已登录状态。\n\n"
+                "选账号数据文件导进来，导完会自动重启一次，重启之后直接进已登录状态。\n\n"
                         + "需要的文件（一般在 /data/data/<包名>/files/ 下）：\n"
                         + "· tgnet.dat\n"
                         + "· dc1conf.dat ~ dc5conf.dat\n"
                         + "· userconfig.xml / userconfigN.xml（在 /data/data/<包名>/shared_prefs/ 下，\n"
                         + "  多账号时每个账号一份，N 是账号序号）\n\n"
-                        + "也可以直接选一个装着这些文件的 zip 包。导入会覆盖当前这份数据的登录状态，"
-                        + "当前没登录才建议用。"));
+                        + "也可以直接选一个装着这些文件的 zip 包。\n"
+                        + "一个账号要能直接进去，凭据和配置得成对存在：只导了 tgnet.dat 却没有对应的 "
+                        + "userconfig，重启后那个账号还是未登录状态。"));
         GeekgramUi.addCard(screen.content, info, 0);
 
         GeekgramUi.section(screen.content, "账号数据");
@@ -181,6 +183,7 @@ public class AccountDataImportActivity extends Activity {
             return;
         }
         logView.setText("");
+        GeekgramAccountImport.begin();
         new Thread(() -> {
             int docs = 0;
             int xml = 0;
@@ -195,13 +198,13 @@ public class AccountDataImportActivity extends Activity {
                         xml += r[1];
                         skipped += r[2];
                     } else if (accountOfConfigName(name) >= 0) {
-                        if (importUserConfig(uri, accountOfConfigName(name))) {
+                        if (stageUserConfig(uri, accountOfConfigName(name))) {
                             xml++;
                         } else {
                             skipped++;
                         }
                     } else if (lower.endsWith(".dat")) {
-                        if (copyDat(uri, name)) {
+                        if (stageDat(uri, name)) {
                             docs++;
                         } else {
                             skipped++;
@@ -219,43 +222,51 @@ public class AccountDataImportActivity extends Activity {
             log("—— 完成：数据文件 " + docs + " 个，账号配置 " + xml + " 份，跳过 " + skipped + " 个");
             if (docs == 0 && xml == 0) {
                 log("没导入到有效文件，确认一下选的是 tgnet.dat / dc1conf.dat / userconfig.xml");
-            } else {
-                if (xml > 1) {
-                    log("重启后账号列表里应该出现 " + xml + " 个账号。");
-                }
-                log("点下面的「重启 Geekgram」，重启后应该直接进已登录状态。");
+                return;
             }
+            int[] accounts = GeekgramAccountImport.stagedAccounts();
+            if (accounts.length > 1) {
+                log("这次带了 " + accounts.length + " 个账号的数据。");
+            }
+            if (!GeekgramAccountImport.commit()) {
+                log("暂存失败，换个存储位置再试。");
+                return;
+            }
+            log("数据已暂存。现在立刻重启，重启之后才算真正写进去（这一步不做的话会被旧的登录状态盖回去）。");
+            runOnUiThread(() -> {
+                Toast.makeText(this, "导入好了，正在重启…", Toast.LENGTH_SHORT).show();
+                restartApp();
+            });
         }).start();
     }
 
-    /** 把 .dat 复制到 files 目录，accountN 子目录的按原结构放 */
-    private boolean copyDat(Uri uri, String name) {
+    /** .dat 写进暂存区：accountN 目录的记到账号 N，根级的记到账号 0 */
+    private boolean stageDat(Uri uri, String name) {
         try {
-            File filesDir = ApplicationLoader.getFilesDirFixed();
-            File target;
+            int account = 0;
+            String base = name;
             if (name != null && name.startsWith("account") && name.contains("_")) {
-                // account2_tgnet.dat 这种命名：放回 accountN 目录
+                // account2_tgnet.dat 这种命名：记到账号 2
                 String num = name.substring("account".length(), name.indexOf('_'));
-                File sub = new File(filesDir, "account" + num);
-                sub.mkdirs();
-                target = new File(sub, name.substring(name.indexOf('_') + 1));
-            } else {
-                target = new File(filesDir, name);
+                try {
+                    account = Integer.parseInt(num);
+                } catch (Throwable ignore) {
+                    account = 0;
+                }
+                base = name.substring(name.indexOf('_') + 1);
+            }
+            if (!GeekgramAccountImport.acceptDatName(base)) {
+                log("跳过：" + name + "（不是 tgnet.dat / dcNconf.dat）");
+                return false;
             }
             InputStream in = getContentResolver().openInputStream(uri);
             if (in == null) {
                 return false;
             }
-            OutputStream out = new FileOutputStream(target);
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = in.read(buffer)) > 0) {
-                out.write(buffer, 0, read);
-            }
-            out.close();
+            boolean ok = GeekgramAccountImport.stageDat(account, base, in);
             in.close();
-            log("已写入：" + target.getName() + " (" + target.length() + " 字节)");
-            return true;
+            log((ok ? "已暂存：" : "写入失败：") + base + (account == 0 ? "" : "（账号 " + (account + 1) + "）"));
+            return ok;
         } catch (Throwable e) {
             FileLog.e(e);
             log("写入失败：" + name + " " + e.getMessage());
@@ -294,13 +305,12 @@ public class AccountDataImportActivity extends Activity {
         return null;
     }
 
-    /** 解压 zip，内部按文件名规则分发 */
+    /** 解压 zip，内部按路径分清是哪个账号，全部写进暂存区 */
     private int[] importZip(Uri uri) {
         int docs = 0, xml = 0, skipped = 0;
         try {
             InputStream in = getContentResolver().openInputStream(uri);
             ZipInputStream zin = new ZipInputStream(in);
-            File filesDir = ApplicationLoader.getFilesDirFixed();
             ZipEntry entry;
             while ((entry = zin.getNextEntry()) != null) {
                 if (entry.isDirectory()) {
@@ -309,31 +319,23 @@ public class AccountDataImportActivity extends Activity {
                 String path = entry.getName();
                 String base = path.substring(path.lastIndexOf('/') + 1);
                 String lower = base.toLowerCase();
+                int accountOfDir = accountOfDirName(accountDirOf(path));
                 if (accountOfConfigName(base) >= 0) {
-                    if (importUserConfig(zin, accountOfConfigName(base))) {
+                    if (GeekgramAccountImport.stagePrefs(accountOfConfigName(base), zin)) {
                         xml++;
+                        log("已暂存配置：账号 " + (accountOfConfigName(base) + 1));
                     } else {
                         skipped++;
                     }
                 } else if (lower.endsWith(".dat")) {
-                    File target;
-                    String dirName = accountDirOf(path);
-                    if (dirName != null) {
-                        File sub = new File(filesDir, dirName);
-                        sub.mkdirs();
-                        target = new File(sub, base);
+                    if (!GeekgramAccountImport.acceptDatName(base)) {
+                        skipped++;
+                    } else if (GeekgramAccountImport.stageDat(accountOfDir < 0 ? 0 : accountOfDir, base, zin)) {
+                        docs++;
+                        log("已暂存：" + base + (accountOfDir > 0 ? "（账号 " + (accountOfDir + 1) + "）" : ""));
                     } else {
-                        target = new File(filesDir, base);
+                        skipped++;
                     }
-                    OutputStream out = new FileOutputStream(target);
-                    byte[] buffer = new byte[8192];
-                    int read;
-                    while ((read = zin.read(buffer)) > 0) {
-                        out.write(buffer, 0, read);
-                    }
-                    out.close();
-                    docs++;
-                    log("已写入：" + target.getName());
                 } else {
                     skipped++;
                 }
@@ -347,12 +349,29 @@ public class AccountDataImportActivity extends Activity {
         return new int[]{docs, xml, skipped};
     }
 
-    /** 解析 userconfig xml，把每个键写进 SharedPreferences("userconfing") */
-    private boolean importUserConfig(Uri uri, int account) {
+    /** "account2" → 2；认不出返回 -1 */
+    private int accountOfDirName(String dir) {
+        if (TextUtils.isEmpty(dir) || !dir.startsWith("account")) {
+            return -1;
+        }
+        try {
+            int v = Integer.parseInt(dir.substring("account".length()));
+            return v >= 0 && v < 4 ? v : -1;
+        } catch (Throwable e) {
+            return -1;
+        }
+    }
+
+    /** userconfig 写进暂存区（等到开机再解析落盘） */
+    private boolean stageUserConfig(Uri uri, int account) {
         try {
             InputStream in = getContentResolver().openInputStream(uri);
-            boolean ok = importUserConfig(in, account);
+            if (in == null) {
+                return false;
+            }
+            boolean ok = GeekgramAccountImport.stagePrefs(account, in);
             in.close();
+            log((ok ? "已暂存配置：账号 " : "配置写入失败：账号 ") + (account + 1));
             return ok;
         } catch (Throwable e) {
             FileLog.e(e);
@@ -397,89 +416,6 @@ public class AccountDataImportActivity extends Activity {
         }
     }
 
-    private boolean importUserConfig(InputStream in, int account) {
-        int count = 0;
-        int bad = 0;
-        String prefName = account == 0 ? "userconfing" : ("userconfig" + account);
-        String who = "账号 " + (account + 1);
-        try {
-            SharedPreferences prefs = ApplicationLoader.applicationContext.getSharedPreferences(prefName, Context.MODE_PRIVATE);
-            SharedPreferences.Editor editor = prefs.edit();
-            XmlPullParser parser = Xml.newPullParser();
-            parser.setInput(in, "UTF-8");
-            int eventType = parser.getEventType();
-            while (eventType != XmlPullParser.END_DOCUMENT) {
-                if (eventType == XmlPullParser.START_TAG) {
-                    String tag = parser.getName();
-                    String key = parser.getAttributeValue(null, "name");
-                    if (key != null) {
-                        try {
-                            if ("set".equals(tag)) {
-                                java.util.HashSet<String> set = new java.util.HashSet<>();
-                                int depth = parser.getDepth();
-                                while (true) {
-                                    int inner = parser.next();
-                                    if (inner == XmlPullParser.END_DOCUMENT) {
-                                        break;
-                                    }
-                                    if (inner == XmlPullParser.END_TAG && parser.getDepth() == depth) {
-                                        break;
-                                    }
-                                    if (inner == XmlPullParser.START_TAG && "string".equals(parser.getName())) {
-                                        set.add(parser.nextText());
-                                    }
-                                }
-                                editor.putStringSet(key, set);
-                                count++;
-                            } else if ("string".equals(tag)) {
-                                String v = parser.getAttributeValue(null, "value");
-                                if (v == null) {
-                                    v = parser.nextText();
-                                }
-                                editor.putString(key, v);
-                                count++;
-                            } else if ("int".equals(tag) || "long".equals(tag)
-                                    || "float".equals(tag) || "boolean".equals(tag)) {
-                                // Android 的 int/long/float/boolean 是属性写法 <long name="x" value="0"/>，
-                                // 没有文本节点。以前统一用 nextText() 读，一碰这类标签就抛
-                                // END_TAG expected，整份配置解析中断，一项都没写进去。
-                                String v = parser.getAttributeValue(null, "value");
-                                if (v == null) {
-                                    v = parser.nextText();
-                                }
-                                String t = v.trim();
-                                if ("int".equals(tag)) {
-                                    editor.putInt(key, Integer.parseInt(t));
-                                } else if ("long".equals(tag)) {
-                                    editor.putLong(key, Long.parseLong(t));
-                                } else if ("float".equals(tag)) {
-                                    editor.putFloat(key, Float.parseFloat(t));
-                                } else {
-                                    editor.putBoolean(key, "true".equalsIgnoreCase(t) || "1".equals(t));
-                                }
-                                count++;
-                            }
-                        } catch (Throwable perItem) {
-                            // 单项不认识就跳过，别让它把整份配置带崩
-                            bad++;
-                            FileLog.e(perItem);
-                        }
-                    }
-                }
-                eventType = parser.next();
-            }
-            if (!editor.commit()) {
-                log(who + " 配置写入失败（旧数据冲突），先清除应用数据再导入");
-                return false;
-            }
-            log(who + " 配置已写入：" + count + " 项" + (bad > 0 ? "（跳过 " + bad + " 项）" : ""));
-            return count > 0;
-        } catch (Throwable e) {
-            FileLog.e(e);
-            log(who + " 配置解析失败：" + e.getMessage());
-            return false;
-        }
-    }
 
     private void restartApp() {
         // 必须先杀掉进程：UserConfig 在进程启动时就把账号配置读进内存了，

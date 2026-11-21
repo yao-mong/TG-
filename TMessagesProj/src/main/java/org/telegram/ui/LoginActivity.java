@@ -125,6 +125,7 @@ import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.GeekgramAccountImport;
 import org.telegram.messenger.AuthTokensHelper;
 import org.telegram.messenger.BillingController;
 import org.telegram.messenger.BuildConfig;
@@ -557,6 +558,18 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
     public boolean onFragmentCreate() {
         getNotificationCenter().addWeakObserver(this, NotificationCenter.didUpdateConnectionState);
         getNotificationCenter().addWeakObserver(this, NotificationCenter.newSuggestionsAvailable);
+        // Geekgram: 刚导入完就被服务器踢回来（401），说明这份凭据已经不能用了，
+        // 得说清楚原因，否则用户只会觉得「登上去又莫名其妙掉出来」。
+        if (GeekgramAccountImport.consumeForceLogoutAfterImport()) {
+            AndroidUtilities.runOnUIThread(() -> {
+                try {
+                    Toast.makeText(ApplicationLoader.applicationContext,
+                            "导入的凭据已被服务器作废：同一个登录凭据只能在一处使用。把原设备上这个账号退掉（或 设置→设备 里终止那个会话）后再导入，也可以直接用手机号登录。",
+                            Toast.LENGTH_LONG).show();
+                } catch (Throwable ignore) {
+                }
+            }, 1200);
+        }
         return super.onFragmentCreate();
     }
 

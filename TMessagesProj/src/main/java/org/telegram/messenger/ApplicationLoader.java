@@ -301,6 +301,15 @@ public class ApplicationLoader extends Application {
             return;
         }
 
+        // Geekgram: 账号数据导入是「先暂存、重启、再落盘」的。必须在这里应用：
+        // 此时 native 与 UserConfig 都还没读配置，落盘之后读到的就是干净的新数据，
+        // 不会像以前那样被运行中旧配置的 saveConfig() 盖回去。
+        try {
+            GeekgramAccountImport.applyPending(this);
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+
         // AndroidUtilities must be initialized before FileLog
         final String helloWorld = AndroidUtilities.getHelloWorld();
 

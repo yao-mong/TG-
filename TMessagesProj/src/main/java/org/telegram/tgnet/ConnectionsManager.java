@@ -34,6 +34,7 @@ import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.CaptchaController;
 import org.telegram.messenger.EmuDetector;
 import org.telegram.messenger.FileLoadOperation;
+import org.telegram.messenger.GeekgramAccountImport;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FileUploadOperation;
@@ -868,6 +869,9 @@ public class ConnectionsManager extends BaseController {
     }
 
     public static void onLogout(final int currentAccount) {
+        // Geekgram: 这是服务器把凭据踢掉了（401），不是用户主动退出。
+        // 记一笔，登录页给一句人话解释，别让人莫名其妙掉回登录页。
+        GeekgramAccountImport.markForceLogout();
         AndroidUtilities.runOnUIThread(() -> {
             AccountInstance accountInstance = AccountInstance.getInstance(currentAccount);
             if (accountInstance.getUserConfig().getClientUserId() != 0) {
