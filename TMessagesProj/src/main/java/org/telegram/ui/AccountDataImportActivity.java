@@ -32,6 +32,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -64,7 +65,8 @@ public class AccountDataImportActivity extends Activity {
                         + "需要的文件（一般在 /data/data/<包名>/files/ 下）：\n"
                         + "· tgnet.dat\n"
                         + "· dc1conf.dat ~ dc5conf.dat\n"
-                        + "· userconfig.xml（在 /data/data/<包名>/shared_prefs/ 下）\n\n"
+                        + "· userconfig.xml / userconfigN.xml（在 /data/data/<包名>/shared_prefs/ 下，\n"
+                        + "  多账号时每个账号一份，N 是账号序号）\n\n"
                         + "也可以直接选一个装着这些文件的 zip 包。导入会覆盖当前这份数据的登录状态，"
                         + "当前没登录才建议用。"));
         GeekgramUi.addCard(screen.content, info, 0);
@@ -192,8 +194,8 @@ public class AccountDataImportActivity extends Activity {
                         docs += r[0];
                         xml += r[1];
                         skipped += r[2];
-                    } else if (lower.endsWith("userconfig.xml") || lower.endsWith("userconfing.xml")) {
-                        if (importUserConfig(uri)) {
+                    } else if (accountOfConfigName(name) >= 0) {
+                        if (importUserConfig(uri, accountOfConfigName(name))) {
                             xml++;
                         } else {
                             skipped++;
@@ -218,6 +220,9 @@ public class AccountDataImportActivity extends Activity {
             if (docs == 0 && xml == 0) {
                 log("没导入到有效文件，确认一下选的是 tgnet.dat / dc1conf.dat / userconfig.xml");
             } else {
+                if (xml > 1) {
+                    log("重启后账号列表里应该出现 " + xml + " 个账号。");
+                }
                 log("点下面的「重启 Geekgram」，重启后应该直接进已登录状态。");
             }
         }).start();
@@ -304,8 +309,8 @@ public class AccountDataImportActivity extends Activity {
                 String path = entry.getName();
                 String base = path.substring(path.lastIndexOf('/') + 1);
                 String lower = base.toLowerCase();
-                if (lower.endsWith("userconfig.xml") || lower.endsWith("userconfing.xml")) {
-                    if (importUserConfig(zin)) {
+                if (accountOfConfigName(base) >= 0) {
+                    if (importUserConfig(zin, accountOfConfigName(base))) {
                         xml++;
                     } else {
                         skipped++;
@@ -343,10 +348,10 @@ public class AccountDataImportActivity extends Activity {
     }
 
     /** 解析 userconfig xml，把每个键写进 SharedPreferences("userconfing") */
-    private boolean importUserConfig(Uri uri) {
+    private boolean importUserConfig(Uri uri, int account) {
         try {
             InputStream in = getContentResolver().openInputStream(uri);
-            boolean ok = importUserConfig(in);
+            boolean ok = importUserConfig(in, account);
             in.close();
             return ok;
         } catch (Throwable e) {
@@ -355,11 +360,50 @@ public class AccountDataImportActivity extends Activity {
         }
     }
 
-    private boolean importUserConfig(InputStream in) {
+    /**
+     * 从配置文件名认出账号序号：userconfig.xml / userconfing.xml = 0，userconfigN.xml = N；不认返回 -1。
+     * Telegram 的多账号配置是分开存的（账号 0 → userconfing，账号 N → userconfigN），
+     * 不是同一份 xml 里的 user2/user3。以前只认账号 0 那一个名字，其余账号的配置直接跳过。
+     */
+    private int accountOfConfigName(String name) {
+        if (name == null) {
+            return -1;
+        }
+        String n = name.toLowerCase(Locale.US);
+        int slash = n.lastIndexOf('/');
+        if (slash >= 0) {
+            n = n.substring(slash + 1);
+        }
+        if (n.equals("userconfing.xml") || n.equals("userconfig.xml")) {
+            return 0;
+        }
+        if (!n.startsWith("userconfig") || !n.endsWith(".xml")) {
+            return -1;
+        }
+        String tail = n.substring("userconfig".length(), n.length() - 4);
+        if (tail.isEmpty()) {
+            return -1;
+        }
+        for (int a = 0; a < tail.length(); a++) {
+            if (!Character.isDigit(tail.charAt(a))) {
+                return -1;
+            }
+        }
+        try {
+            int acc = Integer.parseInt(tail);
+            return acc >= 0 && acc < 4 ? acc : -1;
+        } catch (Throwable e) {
+            return -1;
+        }
+    }
+
+    private boolean importUserConfig(InputStream in, int account) {
         int count = 0;
         int bad = 0;
+        String prefName = account == 0 ? "userconfing" : ("userconfig" + account);
+        String who = "账号 " + (account + 1);
         try {
-            SharedPreferences prefs = ApplicationLoader.applicationContext.getSharedPreferences("userconfing", Context.MODE_PRIVATE);
+            SharedPreferences prefs = ApplicationLoader.applicationContext.getSharedPreferences(prefName, Context.MODE_PRIVATE);
             SharedPreferences.Editor editor = prefs.edit();
             XmlPullParser parser = Xml.newPullParser();
             parser.setInput(in, "UTF-8");
@@ -425,14 +469,14 @@ public class AccountDataImportActivity extends Activity {
                 eventType = parser.next();
             }
             if (!editor.commit()) {
-                log("账号配置写入失败（旧数据冲突），先清除应用数据再导入");
+                log(who + " 配置写入失败（旧数据冲突），先清除应用数据再导入");
                 return false;
             }
-            log("账号配置已写入：" + count + " 项" + (bad > 0 ? "（跳过 " + bad + " 项）" : ""));
+            log(who + " 配置已写入：" + count + " 项" + (bad > 0 ? "（跳过 " + bad + " 项）" : ""));
             return count > 0;
         } catch (Throwable e) {
             FileLog.e(e);
-            log("账号配置解析失败：" + e.getMessage());
+            log(who + " 配置解析失败：" + e.getMessage());
             return false;
         }
     }

@@ -67,7 +67,7 @@ public class AccountDataExportActivity extends Activity {
                 "把本机当前账号的数据打成一个 zip，存到你手机上任何位置。\n\n"
                         + "导出的包里有：\n"
                         + "· tgnet.dat / dcNconf.dat（登录凭据与节点配置）\n"
-                        + "· userconfig.xml（账号配置）\n\n"
+                        + "· userconfig.xml / userconfigN.xml（每个账号的配置）\n\n"
                         + "换台手机装 Geekgram → 登录页「用账号文件登录」→ 选这个 zip，不用输验证码就能进。\n"
                         + "导出的包等于账号钥匙，别发给别人。"));
         GeekgramUi.addCard(screen.content, info, 0);
@@ -158,16 +158,62 @@ public class AccountDataExportActivity extends Activity {
             }
         }
 
+        // 账号配置：账号 1 在 userconfing.xml，账号 2/3/4 在 userconfig1~3.xml
+        // （UserConfig.getPreferences()：账号 0 → "userconfing"，账号 N → "userconfigN"）
+        // 以前只收账号 1 那一份，其余账号的 tgnet 导出去了、配置却没导出，
+        // 导回去只有第一个账号能恢复，其余全是未登录。
         File prefsDir = new File(filesDir.getParentFile(), "shared_prefs");
-        File uc = new File(prefsDir, "userconfing.xml");
-        if (!uc.exists()) {
-            File uc2 = new File(prefsDir, "userconfig.xml");
-            if (uc2.exists()) {
-                uc = uc2;
+        File[] prefFiles = prefsDir.listFiles();
+        if (prefFiles != null) {
+            Arrays.sort(prefFiles, Comparator.comparing(File::getName));
+            boolean hasAccount0 = false;
+            for (File pf : prefFiles) {
+                if (!pf.isFile() || pf.length() <= 0) {
+                    continue;
+                }
+                int acc = accountOfConfigName(pf.getName());
+                if (acc < 0) {
+                    continue;
+                }
+                if (acc == 0) {
+                    // userconfing.xml 和 userconfig.xml 可能是同一份，只收一个
+                    if (hasAccount0) {
+                        continue;
+                    }
+                    hasAccount0 = true;
+                }
+                String entryName = acc == 0 ? "userconfig.xml" : ("userconfig" + acc + ".xml");
+                out.add(new Item(pf, entryName, entryName + "（账号 " + (acc + 1) + "）"));
             }
         }
-        if (uc.exists() && uc.length() > 0) {
-            out.add(new Item(uc, "userconfig.xml", "userconfig.xml"));
+    }
+
+    /** 从配置文件名认出账号序号：userconfing.xml / userconfig.xml = 0，userconfigN.xml = N；不认返回 -1 */
+    private int accountOfConfigName(String name) {
+        if (name == null) {
+            return -1;
+        }
+        String n = name.toLowerCase(Locale.US);
+        if (n.equals("userconfing.xml") || n.equals("userconfig.xml")) {
+            return 0;
+        }
+        if (!n.startsWith("userconfig") || !n.endsWith(".xml")) {
+            return -1;
+        }
+        String tail = n.substring("userconfig".length(), n.length() - 4);
+        if (tail.isEmpty()) {
+            return -1;
+        }
+        for (int a = 0; a < tail.length(); a++) {
+            if (!Character.isDigit(tail.charAt(a))) {
+                return -1;
+            }
+        }
+        try {
+            int acc = Integer.parseInt(tail);
+            return acc >= 0 && acc < 4 ? acc : -1;
+        } catch (Throwable e) {
+            return -1;
         }
     }
 
