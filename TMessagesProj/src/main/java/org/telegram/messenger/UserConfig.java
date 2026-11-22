@@ -25,8 +25,10 @@ import java.util.Arrays;
 public class UserConfig extends BaseController {
 
     public static int selectedAccount;
-    public final static int MAX_ACCOUNT_DEFAULT_COUNT = 3;
-    public final static int MAX_ACCOUNT_COUNT = 4;
+    // Geekgram: 登录账号数不再限制（免费账号也不再卡 3 个）
+    // 数组/缓存都按 MAX_ACCOUNT_COUNT 分配，这里给出足够大的槽位
+    public final static int MAX_ACCOUNT_COUNT = 20;
+    public final static int MAX_ACCOUNT_DEFAULT_COUNT = MAX_ACCOUNT_COUNT;
 
     private final Object sync = new Object();
     private volatile boolean configLoaded;
@@ -123,7 +125,8 @@ public class UserConfig extends BaseController {
     }
 
     public static int getMaxAccountCount() {
-        return hasPremiumOnAccounts() ? 5 : 3;
+        // Geekgram: 不区分普通/会员，一律按最大槽位
+        return MAX_ACCOUNT_COUNT;
     }
 
     public int getNewMessageId() {

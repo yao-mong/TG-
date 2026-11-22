@@ -214,6 +214,9 @@ public class ApplicationLoader extends Application {
 
                     boolean isSlow = isConnectionSlow();
                     for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+                        if (!UserConfig.getInstance(a).isClientActivated()) {
+                            continue;
+                        }
                         ConnectionsManager.getInstance(a).checkConnection();
                         FileLoader.getInstance(a).onNetworkChanged(isSlow);
                     }
@@ -250,10 +253,14 @@ public class ApplicationLoader extends Application {
         SharedPrefsHelper.init(applicationContext);
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) { //TODO improve account
             UserConfig.getInstance(a).loadConfig();
-            MessagesController.getInstance(a);
+            // Geekgram: 槽位多了以后，空槽位不再提前建控制器，避免白白占内存
+            final boolean activated = UserConfig.getInstance(a).isClientActivated();
+            if (activated) {
+                MessagesController.getInstance(a);
+            }
             if (a == 0) {
                 SharedConfig.pushStringStatus = "__FIREBASE_GENERATING_SINCE_" + ConnectionsManager.getInstance(a).getCurrentTime() + "__";
-            } else {
+            } else if (activated) {
                 ConnectionsManager.getInstance(a);
             }
             TLRPC.User user = UserConfig.getInstance(a).getCurrentUser();
@@ -271,6 +278,9 @@ public class ApplicationLoader extends Application {
 
         MediaController.getInstance();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) { //TODO improve account
+            if (!UserConfig.getInstance(a).isClientActivated()) {
+                continue;
+            }
             ContactsController.getInstance(a).checkAppAccount();
             DownloadController.getInstance(a);
         }
