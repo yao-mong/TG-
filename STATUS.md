@@ -135,3 +135,23 @@ versionCode 73149 / versionName 13.2.7 / 包名 com.geekrem.messenger
   dex 内命中「用账号文件登录」「选手机导出的账号文件，直接恢复到已登录」「打不开导入界面」
 - APK:output/Geekgram-13.3.6-beta-73239.apk + 安装说明
 - 未在真机运行(沙箱无设备)
+
+## Geekgram 正式版 13.3.6（2026-11-22，v22）
+- 13.3.6 / versionCode 73249 / 包名 com.geekrem.messenger（正式通道，从 beta 线转正）
+- 分支 master（geekgram-beta 已快进合并）；APK：output/Geekgram-13.3.6-73249.apk
+- 1) 测试版转正式版：beta 线全部功能并入正式包；release 构建 DEBUG_VERSION=false → 云更新走 stable 通道
+- 2) 登录账号无上限限制：
+  - UserConfig.MAX_ACCOUNT_COUNT 4 → 20（数组/缓存槽位随之扩大）
+  - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT 3 → MAX_ACCOUNT_COUNT，
+    UserInfoActivity / MainTabsActivity / LogoutActivity 里
+    `freeAccounts -= (MAX_ACCOUNT_COUNT - MAX_ACCOUNT_DEFAULT_COUNT)` 变成减 0 →
+    普通账号不再卡 3 个、不再弹 LimitReachedBottomSheet
+  - getMaxAccountCount() 固定返回 MAX_ACCOUNT_COUNT（不再是 premium?5:3）
+  - javap 实测：MAX_ACCOUNT_COUNT=20 / MAX_ACCOUNT_DEFAULT_COUNT=20 / getMaxAccountCount bipush 20
+- 3) 多账号启动优化（20 槽位后才需要）：ApplicationLoader 三个启动期循环
+  （MessagesController/ConnectionsManager、ContactsController/DownloadController、网络变化广播）
+  加 isClientActivated() 判断，空槽位不再提前实例化控制器
+- 验证：aapt2 badging → com.geekrem.messenger / 73249 / 13.3.6 / arm64-v8a；
+  apksigner SHA-256 d221217b…526fd4（与 13.2.7 正式版一致，可覆盖安装升级）；
+  dex 内命中「用账号文件登录」「直接恢复到已登录」「选手机导出的账号文件」
+- 未在真机运行（沙箱无设备）
