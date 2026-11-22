@@ -417,7 +417,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
 
         instance = this;
+        org.telegram.messenger.GeekgramDiag.mark("LaunchActivity.onCreate 进入");
         ApplicationLoader.postInitApplication();
+        org.telegram.messenger.GeekgramDiag.mark("postInitApplication 返回，开始建界面");
         AndroidUtilities.checkDisplaySize(this, getResources().getConfiguration());
         currentAccount = UserConfig.selectedAccount;
         if (BuildVars.DEBUG_VERSION || BuildVars.DEBUG_PRIVATE_VERSION) {

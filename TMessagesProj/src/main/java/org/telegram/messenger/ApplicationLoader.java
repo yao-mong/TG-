@@ -193,13 +193,29 @@ public class ApplicationLoader extends Application {
             return;
         }
         applicationInited = true;
+        try {
+            postInitApplicationInternal();
+        } catch (Throwable e) {
+            // Geekgram: 启动里某一步出错不再让整个 App 直接闪退，先记录下来
+            FileLog.e(e);
+            try {
+                GeekgramDiag.markThrowable("postInitApplication 失败", e);
+            } catch (Throwable ignore) {
+            }
+        }
+    }
+
+    private static void postInitApplicationInternal() {
+        GeekgramDiag.mark("postInit 开始");
         NativeLoader.initNativeLibs(ApplicationLoader.applicationContext);
+        GeekgramDiag.mark("原生库加载完成");
 
         try {
             LocaleController.getInstance(); //TODO improve
         } catch (Exception e) {
             e.printStackTrace();
         }
+        GeekgramDiag.mark("LocaleController ok");
 
         try {
             connectivityManager = (ConnectivityManager) ApplicationLoader.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -250,41 +266,72 @@ public class ApplicationLoader extends Application {
         }
 
         SharedConfig.loadConfig();
+        GeekgramDiag.mark("SharedConfig ok");
         SharedPrefsHelper.init(applicationContext);
+        GeekgramDiag.mark("账号配置开始");
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) { //TODO improve account
-            UserConfig.getInstance(a).loadConfig();
-            // Geekgram: 槽位多了以后，空槽位不再提前建控制器，避免白白占内存
-            final boolean activated = UserConfig.getInstance(a).isClientActivated();
-            if (activated) {
-                MessagesController.getInstance(a);
-            }
-            if (a == 0) {
-                SharedConfig.pushStringStatus = "__FIREBASE_GENERATING_SINCE_" + ConnectionsManager.getInstance(a).getCurrentTime() + "__";
-            } else if (activated) {
-                ConnectionsManager.getInstance(a);
-            }
-            TLRPC.User user = UserConfig.getInstance(a).getCurrentUser();
-            if (user != null) {
-                MessagesController.getInstance(a).putUser(user, true);
-                SendMessagesHelper.getInstance(a).checkUnsentMessages();
+            try {
+                GeekgramDiag.mark("账号 " + a + " 加载");
+                UserConfig.getInstance(a).loadConfig();
+                // Geekgram: 槽位多了以后，空槽位不再提前建控制器，避免白白占内存
+                final boolean activated = UserConfig.getInstance(a).isClientActivated();
+                if (activated) {
+                    MessagesController.getInstance(a);
+                }
+                if (a == 0) {
+                    SharedConfig.pushStringStatus = "__FIREBASE_GENERATING_SINCE_" + ConnectionsManager.getInstance(a).getCurrentTime() + "__";
+                } else if (activated) {
+                    ConnectionsManager.getInstance(a);
+                }
+                TLRPC.User user = UserConfig.getInstance(a).getCurrentUser();
+                if (user != null) {
+                    MessagesController.getInstance(a).putUser(user, true);
+                    SendMessagesHelper.getInstance(a).checkUnsentMessages();
+                }
+                GeekgramDiag.mark("账号 " + a + " ok activated=" + activated);
+            } catch (Throwable e) {
+                FileLog.e(e);
+                GeekgramDiag.markThrowable("账号 " + a + " 初始化失败（已跳过）", e);
             }
         }
+        GeekgramDiag.mark("账号配置完成");
 
         ApplicationLoader app = (ApplicationLoader) ApplicationLoader.applicationContext;
-        app.initPushServices();
+        try {
+            app.initPushServices();
+        } catch (Throwable e) {
+            FileLog.e(e);
+            GeekgramDiag.markThrowable("initPushServices 失败（已跳过）", e);
+        }
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("app initied");
         }
 
-        MediaController.getInstance();
+        try {
+            MediaController.getInstance();
+        } catch (Throwable e) {
+            FileLog.e(e);
+            GeekgramDiag.markThrowable("MediaController 失败（已跳过）", e);
+        }
+        GeekgramDiag.mark("MediaController ok");
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) { //TODO improve account
             if (!UserConfig.getInstance(a).isClientActivated()) {
                 continue;
             }
-            ContactsController.getInstance(a).checkAppAccount();
-            DownloadController.getInstance(a);
+            try {
+                ContactsController.getInstance(a).checkAppAccount();
+                DownloadController.getInstance(a);
+            } catch (Throwable e) {
+                FileLog.e(e);
+                GeekgramDiag.markThrowable("账号 " + a + " 联系人/下载初始化失败（已跳过）", e);
+            }
         }
-        BillingController.getInstance().startConnection();
+        try {
+            BillingController.getInstance().startConnection();
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+        GeekgramDiag.mark("postInit 完成");
         // HTML widgets: the isolated engine's process up front, after the app's own start, so that a widget's first
         // frame does not wait for it.
         AndroidUtilities.runOnUIThread(() -> Utilities.globalQueue.postRunnable(
@@ -305,6 +352,11 @@ public class ApplicationLoader extends Application {
         }
 
         super.onCreate();
+
+        try {
+            GeekgramDiag.install(this);
+        } catch (Throwable ignore) {
+        }
 
         // The widget engine's isolated process has no files, network or accounts: none of the client starts there.
         if (org.telegram.utils.twidget.WidgetEngineService.isEngineProcess()) {
@@ -382,14 +434,37 @@ public class ApplicationLoader extends Application {
 
         AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
 
-        LauncherIconController.tryFixLauncherIconIfNeeded();
-        ProxyRotationController.init();
+        try {
+            LauncherIconController.tryFixLauncherIconIfNeeded();
+        } catch (Throwable e) {
+            FileLog.e(e);
+            GeekgramDiag.markThrowable("桌面图标修正失败（已跳过）", e);
+        }
+        try {
+            ProxyRotationController.init();
+        } catch (Throwable e) {
+            FileLog.e(e);
+            GeekgramDiag.markThrowable("代理轮换初始化失败（已跳过）", e);
+        }
+        GeekgramDiag.mark("onCreate 完成，等界面");
 
         // Geekgram: 启动后自动探测本机 Clash，探到就接管连接（可在代理页关闭）；
         // 如果填过订阅，再把内置内核拉起来接管
         AndroidUtilities.runOnUIThread(() -> {
-            ClashProxyHelper.autoInit();
-            AndroidUtilities.runOnUIThread(ClashCoreManager::autoStart, 1500);
+            try {
+                ClashProxyHelper.autoInit();
+            } catch (Throwable e) {
+                FileLog.e(e);
+                GeekgramDiag.markThrowable("Clash 自动接管失败（已跳过）", e);
+            }
+            AndroidUtilities.runOnUIThread(() -> {
+                try {
+                    ClashCoreManager.autoStart();
+                } catch (Throwable e) {
+                    FileLog.e(e);
+                    GeekgramDiag.markThrowable("内置内核自启失败（已跳过）", e);
+                }
+            }, 1500);
         }, 2500);
 
         //if (BuildConfig.DEBUG_PRIVATE_VERSION) {

@@ -155,3 +155,41 @@ versionCode 73149 / versionName 13.2.7 / 包名 com.geekrem.messenger
   apksigner SHA-256 d221217b…526fd4（与 13.2.7 正式版一致，可覆盖安装升级）；
   dex 内命中「用账号文件登录」「直接恢复到已登录」「选手机导出的账号文件」
 - 未在真机运行（沙箱无设备）
+
+## Geekgram 正式版 13.3.7（2026-11-22，v23 · 修应用名 + 启动闪退诊断）
+- 13.3.7 / versionCode 73259 / 包名 com.geekrem.messenger（正式通道）
+- APK：output/Geekgram-13.3.7-73259.apk
+
+### 用户反馈（针对 13.3.6 / 73249）
+1. 装完应用名还是「Geekgram 测试版」
+2. 打开一两秒闪退
+
+### 根因与改法
+1) 应用名：切 beta 线时把 `TMessagesProj/src/main/res/values/strings.xml` 的
+   `AppName` 改成了「Geekgram 测试版」，转正式版只改了 APP_PACKAGE，没改回来。
+   → `AppName` 改回 `Geekgram`（清单 android:label="@string/AppName"，桌面/关于页同步生效）。
+   核对：aapt2 badging → application-label:'Geekgram'，全工程 res 已无「测试版」字样。
+
+2) 闪退：`ApplicationLoader.postInitApplication()` 在 `LaunchActivity.onCreate`
+   里同步执行（原生库加载 + 全部账号槽位初始化），正是「点开后一两秒」这段。
+   两个包 dex 体积只差几百字节、原生库完全一致，说明不是打包问题，是启动这段抛异常。
+   → 新增 `GeekgramDiag`：未捕获异常 + 启动分阶段打点，写
+     `Download/geekgram-startup-log.txt`（API29+ 走 MediaStore，低版本走公共下载目录），
+     另一份写 app 外部私有目录；主线程崩溃时先落盘再交给原 handler。
+   → `postInitApplication` 拆成 wrapper + `postInitApplicationInternal()`：
+     整体 try/catch(Throwable)，失败先记录不再直接退出；
+     两个账号循环内部逐项 try/catch（某个槽位失败只跳过该槽位）；
+     initPushServices / MediaController / BillingController / 图标修正 /
+     代理轮换初始化 / Clash 自动接管 / 内核自启 全部加保护并打点。
+   → LaunchActivity 进入与 postInit 返回各打一个点，用于区分「挂在启动初始化」
+     还是「挂在建界面」。
+
+### 未改动
+- 账号上限逻辑（MAX_ACCOUNT_COUNT=20、getMaxAccountCount、空槽位不建控制器）保持 13.3.6 的做法
+
+### 验证
+- BUILD SUCCESSFUL 8m40s（:TMessagesProj_App:assembleAfatRelease）
+- aapt2：com.geekrem.messenger / 73259 / 13.3.7 / arm64-v8a / label=Geekgram
+- apksigner：SHA-256 d221217b…526fd4（与 13.3.6 一致，可覆盖安装）
+- dex 内命中 `geekgram-startup-log.txt`（诊断类已进包）
+- 未在真机运行（沙箱无设备）
