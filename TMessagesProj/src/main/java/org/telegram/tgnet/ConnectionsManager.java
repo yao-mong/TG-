@@ -1014,10 +1014,15 @@ public class ConnectionsManager extends BaseController {
         }
 
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            if (enabled && settings != null && settings.isValid()) {
-                native_setProxySettings(a, address, port, username, password, secret);
-            } else {
-                native_setProxySettings(a, "", 1080, "", "", "");
+            // 原生层只建了 5 个连接实例（索引 0-4），5 以上的索引在原生侧会被合并到第 5 个实例上。
+            // 账号槽位放到 20 以后，这里若照旧对 20 个索引逐个下发代理，
+            // 等于对同一个原生实例连续做十几次「断开重连」，既没意义、也容易把进程搞挂。
+            if (a < NATIVE_MAX_CONNECTION_INSTANCES) {
+                if (enabled && settings != null && settings.isValid()) {
+                    native_setProxySettings(a, address, port, username, password, secret);
+                } else {
+                    native_setProxySettings(a, "", 1080, "", "", "");
+                }
             }
             AccountInstance accountInstance = AccountInstance.getInstance(a);
             if (accountInstance.getUserConfig().isClientActivated()) {
@@ -1025,6 +1030,9 @@ public class ConnectionsManager extends BaseController {
             }
         }
     }
+
+    /** 原生 tgnet 里 ConnectionsManager 实例的数量（Defines.h 的 MAX_ACCOUNT_COUNT） */
+    public static final int NATIVE_MAX_CONNECTION_INSTANCES = 5;
 
     public static native void native_switchBackend(int currentAccount, boolean restart);
     public static native int native_isTestBackend(int currentAccount);

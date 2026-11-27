@@ -32,15 +32,24 @@ public class GeekgramDiag {
 
     /** 主进程固定用这个名字，用户只需要发这个文件 */
     public static final String FILE_NAME = "geekgram-startup-log.txt";
+    /** 只写一行的状态文件，跟主日志交叉验证用 */
+    public static final String STATE_FILE_NAME = "geekgram-state.txt";
 
     private static final String PREFS = "geekgram_diag";
     private static final String KEY_ATTEMPTS = "start_attempts";
     private static final String KEY_LAST_STAGE = "last_stage";
+    /** 上一次进程最后一次心跳的秒数（用来判断进程是在第几秒消失的） */
+    private static final String KEY_LAST_HB = "last_hb_elapsed";
+    /** 上一次启动是不是死在「代理接管 / 内置内核」这一段，是就不在启动时再自动跑它 */
+    private static final String KEY_QUARANTINE_PROXY = "quarantine_proxy";
+    /** 界面出来后要活过这么多秒，才算这次启动真的稳了（否则下次继续降级启动） */
+    private static final long STABLE_WINDOW_MS = 20000L;
 
     private static final Object lock = new Object();
     private static final StringBuilder buffer = new StringBuilder();
     private static Context appContext;
-    private static Uri downloadUri;
+    private static final java.util.HashMap<String, Uri> downloadUris = new java.util.HashMap<>();
+    private static volatile String currentStage = "";
     private static Thread.UncaughtExceptionHandler previousHandler;
     private static boolean installed;
     private static String processName = "";
@@ -96,6 +105,43 @@ public class GeekgramDiag {
                 + " process=" + processName
                 + " 上次未走完启动=" + Math.max(0, safeModeLevel)
                 + (safeModeLevel > 0 ? " 本次安全模式=L" + safeModeLevel : ""));
+
+        if (mainProcess && appContext != null) {
+            try {
+                // 每个进程只记一次：这次启动能不能活过稳定窗口，下次启动就知道了
+                int attempts = prefs().getInt(KEY_ATTEMPTS, 0) + 1;
+                prefs().edit().putInt(KEY_ATTEMPTS, attempts).commit();
+            } catch (Throwable ignore) {
+            }
+        }
+
+        // 上一次进程没走完（降级计数还没被清）→ 把最后停留的那一步、最后心跳秒数打出来。
+        // 原生层崩溃 Java 是抓不到的，但这两条足以把断点锁死到某一步。
+        if (mainProcess && appContext != null) {
+            String prevStage = "";
+            long prevHb = -1;
+            try {
+                SharedPreferences p = prefs();
+                prevStage = p.getString(KEY_LAST_STAGE, "");
+                prevHb = p.getLong(KEY_LAST_HB, -1);
+            } catch (Throwable ignore) {
+            }
+            if (prevStage != null && prevStage.length() > 0) {
+                mark("上次启动中断于：" + prevStage
+                        + (prevHb >= 0 ? ("（进程最后心跳 " + prevHb + "s，之后就没再写日志）") : ""));
+                if (isRiskyStage(prevStage)) {
+                    try {
+                        prefs().edit().putBoolean(KEY_QUARANTINE_PROXY, true).commit();
+                        mark("上次崩在代理接管/内置内核这一段 → 本次启动不再自动跑它（可在代理页开关里重新开启）");
+                    } catch (Throwable ignore) {
+                    }
+                }
+            }
+            try {
+                prefs().edit().remove(KEY_LAST_HB).commit();
+            } catch (Throwable ignore) {
+            }
+        }
         startWatchdog();
     }
 
@@ -127,30 +173,91 @@ public class GeekgramDiag {
         return safeModeLevel;
     }
 
-    /** 界面开始创建时调用：记一次尝试，崩了下次就会降级启动 */
+    /** 界面开始创建时调用（降级计数已在进程启动时记过，这里只补一个打点） */
     public static void beginUiLaunch() {
-        if (!mainProcess || appContext == null) {
-            return;
-        }
-        try {
-            int attempts = prefs().getInt(KEY_ATTEMPTS, 0) + 1;
-            prefs().edit().putInt(KEY_ATTEMPTS, attempts).commit();
-        } catch (Throwable ignore) {
-        }
+        mark("界面开始创建");
     }
 
-    /** 首帧画出来了 = 这次启动是好的，把降级计数清掉 */
+    /**
+     * 首帧画出来了只说明「界面能建起来」，不等于这次启动是好的。
+     *
+     * 以前这里直接把降级计数清零，结果就出现了这次的坑：
+     * 界面 1.1s 就画好了 → 计数清零 → 2 秒后进程才挂 → 下次启动还是 L0 → 再挂一次，
+     * 安全模式永远进不去。所以现在改成：首帧只记一笔，要活过 STABLE_WINDOW_MS
+     * 才把计数清掉；中途挂了，下次启动按 L1 降级跑。
+     */
     public static void markUiReady() {
         if (uiReady) {
             return;
         }
         uiReady = true;
         mark("首帧已绘制，界面正常显示（耗时 " + ((SystemClock.elapsedRealtime() - startElapsed) / 1000f) + "s）");
+        markStage("首帧已绘制，进入稳定观察期（" + (STABLE_WINDOW_MS / 1000) + "s）");
         if (!mainProcess || appContext == null) {
             return;
         }
         try {
-            prefs().edit().putInt(KEY_ATTEMPTS, 0).remove(KEY_LAST_STAGE).commit();
+            final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+            handler.postDelayed(() -> {
+                try {
+                    if (!uiReady) {
+                        return;
+                    }
+                    mark("启动稳定（首帧后 " + (STABLE_WINDOW_MS / 1000) + "s 进程仍在），清除降级计数");
+                    markStage("启动稳定（首帧后 " + (STABLE_WINDOW_MS / 1000) + "s）");
+                    prefs().edit().putInt(KEY_ATTEMPTS, 0).commit();
+                } catch (Throwable ignore) {
+                }
+            }, STABLE_WINDOW_MS);
+        } catch (Throwable ignore) {
+        }
+    }
+
+    /**
+     * 记一步「正在干什么」，同时把这一步写进磁盘。
+     *
+     * 好处：原生层崩溃 Java 抓不到堆栈，但下一次启动能读到「上次中断于：XXX」，
+     * 直接锁死是哪一个动作把进程带走的，不用再一轮轮猜。
+     */
+    public static void markStage(String stage) {
+        currentStage = stage;
+        mark(stage);
+        if (!mainProcess || appContext == null) {
+            return;
+        }
+        try {
+            prefs().edit().putString(KEY_LAST_STAGE, stage).commit();
+        } catch (Throwable ignore) {
+        }
+        flushState(stage);
+    }
+
+    private static boolean isRiskyStage(String stage) {
+        if (stage == null) {
+            return false;
+        }
+        return stage.contains("接管") || stage.contains("代理") || stage.contains("内核");
+    }
+
+    /** 上次启动崩在代理接管 / 内置内核那一段吗 */
+    public static boolean isProxyQuarantined() {
+        if (!mainProcess || appContext == null) {
+            return false;
+        }
+        try {
+            return prefs().getBoolean(KEY_QUARANTINE_PROXY, false);
+        } catch (Throwable ignore) {
+        }
+        return false;
+    }
+
+    /** 用户自己重新打开自动接管时解除隔离（说明他想再试一次） */
+    public static void clearProxyQuarantine() {
+        if (!mainProcess || appContext == null) {
+            return;
+        }
+        try {
+            prefs().edit().putBoolean(KEY_QUARANTINE_PROXY, false).commit();
         } catch (Throwable ignore) {
         }
     }
@@ -224,6 +331,13 @@ public class GeekgramDiag {
                         continue; // 20 秒之后少记一点，免得文件太长
                     }
                     mark("心跳 " + elapsed + "s 主线程=" + state + " 界面就绪=" + uiReady);
+                    flushState(currentStage);
+                    if (mainProcess && appContext != null) {
+                        try {
+                            prefs().edit().putLong(KEY_LAST_HB, elapsed).apply();
+                        } catch (Throwable ignore) {
+                        }
+                    }
                     if (!uiReady && !mainStackDumped && elapsed >= 8 && mainThread != null) {
                         mainStackDumped = true;
                         StringBuilder sb = new StringBuilder("主线程调用栈");
@@ -289,18 +403,73 @@ public class GeekgramDiag {
             }
         } catch (Throwable ignore) {
         }
-        try {
-            if (downloadUri == null) {
-                downloadUri = createDownloadEntry(logFileName());
+        if (!writeDownload(logFileName(), data)) {
+            synchronized (lock) {
+                buffer.append(time()).append("  （下载目录这次没写进去，下次重开文件再写；"
+                        + "私有目录那份不受影响）\n");
             }
-            if (downloadUri != null) {
-                OutputStream out = appContext.getContentResolver().openOutputStream(downloadUri, "wt");
-                if (out != null) {
+        }
+    }
+
+    /**
+     * 状态文件：每次心跳 / 换阶段都盖一遍，内容只有一行。
+     *
+     * 用途是跟主日志交叉验证：如果主日志突然停住、而这个小文件还在继续更新，
+     * 说明进程没死、只是主日志没写下去（那就不是闪退）；两个一起停，才是进程真的没了。
+     */
+    private static void flushState(String stage) {
+        if (!mainProcess || appContext == null) {
+            return;
+        }
+        try {
+            long elapsed = (SystemClock.elapsedRealtime() - startElapsed) / 1000;
+            String data = time() + "  进程存活 " + elapsed + "s  当前步骤=" + stage
+                    + "  界面就绪=" + uiReady + "\n";
+            writeDownload(STATE_FILE_NAME, data);
+            try {
+                File dir = appContext.getExternalFilesDir(null);
+                if (dir != null) {
+                    FileOutputStream out = new FileOutputStream(new File(dir, STATE_FILE_NAME), false);
                     out.write(data.getBytes("UTF-8"));
                     out.close();
                 }
+            } catch (Throwable ignore) {
             }
         } catch (Throwable ignore) {
+        }
+    }
+
+    /** 往下载目录写小文件；同一个文件名固定复用一条记录，写失败就丢掉重建 */
+    private static boolean writeDownload(String fileName, String data) {
+        try {
+            Uri uri;
+            synchronized (downloadUris) {
+                uri = downloadUris.get(fileName);
+            }
+            if (uri == null) {
+                uri = createDownloadEntry(fileName);
+                if (uri == null) {
+                    return false;
+                }
+                synchronized (downloadUris) {
+                    downloadUris.put(fileName, uri);
+                }
+            }
+            OutputStream out = appContext.getContentResolver().openOutputStream(uri, "wt");
+            if (out == null) {
+                synchronized (downloadUris) {
+                    downloadUris.remove(fileName);
+                }
+                return false;
+            }
+            out.write(data.getBytes("UTF-8"));
+            out.close();
+            return true;
+        } catch (Throwable e) {
+            synchronized (downloadUris) {
+                downloadUris.remove(fileName);
+            }
+            return false;
         }
     }
 

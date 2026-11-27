@@ -487,29 +487,34 @@ public class ApplicationLoader extends Application {
 
         // Geekgram: 启动后自动探测本机 Clash，探到就接管连接（可在代理页关闭）；
         // 如果填过订阅，再把内置内核拉起来接管
-        if (safeMode >= 1) {
-            GeekgramDiag.mark("跳过 Clash 自动接管与内置内核自启（安全模式 L" + safeMode + "）");
+        //
+        // 注意：这两件事以前是启动后 2.5 秒就跑，正好压在「界面刚画出来」那一段，
+        // 出问题时分不清是谁把进程带走的。现在推到启动 8 秒 / 12 秒之后，
+        // 而且每一步都写进磁盘（markStage），下次启动能直接读到断在哪。
+        if (GeekgramDiag.isProxyQuarantined()) {
+            GeekgramDiag.mark("跳过 Clash 自动接管与内置内核自启（上次崩在这一段，已隔离；"
+                    + "到「设置 → 数据和存储 → 代理」里把 Clash 本机代理关掉再打开就能重新开启）");
         } else {
             AndroidUtilities.runOnUIThread(() -> {
-                GeekgramDiag.mark("Clash 自动接管 开始");
+                GeekgramDiag.markStage("Clash 自动接管 开始");
                 try {
                     ClashProxyHelper.autoInit();
-                    GeekgramDiag.mark("Clash 自动接管 完成");
+                    GeekgramDiag.markStage("Clash 自动接管 完成");
                 } catch (Throwable e) {
                     FileLog.e(e);
                     GeekgramDiag.markThrowable("Clash 自动接管失败（已跳过）", e);
                 }
                 AndroidUtilities.runOnUIThread(() -> {
-                    GeekgramDiag.mark("内置内核自启 开始");
+                    GeekgramDiag.markStage("内置内核自启 开始");
                     try {
                         ClashCoreManager.autoStart();
-                        GeekgramDiag.mark("内置内核自启 完成");
+                        GeekgramDiag.markStage("内置内核自启 完成");
                     } catch (Throwable e) {
                         FileLog.e(e);
                         GeekgramDiag.markThrowable("内置内核自启失败（已跳过）", e);
                     }
-                }, 1500);
-            }, 2500);
+                }, 4000);
+            }, 8000);
         }
 
         //if (BuildConfig.DEBUG_PRIVATE_VERSION) {

@@ -43,6 +43,7 @@ public class ClashProxyHelper {
     public static void setAutoEnabled(boolean enabled) {
         prefs().edit().putBoolean(PREF_AUTO, enabled).apply();
         if (enabled) {
+            GeekgramDiag.clearProxyQuarantine();
             applyAsync(false);
         } else {
             disable();
@@ -92,7 +93,9 @@ public class ClashProxyHelper {
         new Thread("geekrem-clash-probe") {
             @Override
             public void run() {
+                GeekgramDiag.mark("代理探测 开始（本机 Clash）");
                 final int port = probe();
+                GeekgramDiag.mark("代理探测 完成，端口=" + port);
                 AndroidUtilities.runOnUIThread(() -> {
                     applying = false;
                     if (port > 0) {
@@ -161,8 +164,10 @@ public class ClashProxyHelper {
             editor.putBoolean("proxy_enabled", true);
             editor.commit();
 
+            GeekgramDiag.markStage("应用代理设置 开始（" + DEFAULT_HOST + ":" + port + "）");
             ConnectionsManager.setProxySettings(true, settings);
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
+            GeekgramDiag.markStage("应用代理设置 完成");
         } catch (Throwable ignore) {
         }
     }

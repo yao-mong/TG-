@@ -218,3 +218,66 @@ versionCode 73149 / versionName 13.2.7 / 包名 com.geekrem.messenger
 - 已知未修：原生层 tgnet/Defines.h MAX_ACCOUNT_COUNT=5 与 Java 的 20 槽位不一致，
   连接实例索引 ≥5 会越界；账号数 ≤5 时不受影响。下轮若确认与槽位有关，
   同步把原生 MAX_ACCOUNT_COUNT 放开并全量重编原生库。
+
+## Geekgram 正式版 13.3.9（2026-11-27，v25 · 启动闪退定位 v3）
+
+- 13.3.9 / versionCode 73279 / 包名 com.geekrem.messenger；APK：output/Geekgram-13.3.9-73279.apk
+
+### 用户回传 13.3.8 的日志（11-27 18:36:26）分析
+```
+18:36:26.150 diag installed ... version=13.3.8/73269 上次未走完启动=0
+18:36:26.331 postInit 开始 → 26.868 postInit 完成（账号 0~19 全 ok，activated=0/3）
+18:36:27.263 首帧已绘制（1.115s）
+18:36:28.238 心跳 2s 主线程=RUNNABLE 界面就绪=true
+18:36:29.379 Clash 自动接管 开始 → 完成
+（之后什么都没有：没有 4s 心跳，也没有 1.5s 后该出现的「内置内核自启 开始」）
+```
+结论：启动初始化这关已经过了（界面 1.1s 出来、UI 线程正常），
+断点在启动后约 3.1 秒、Clash 自动接管返回后 ~0.8 秒内。
+
+### 上一版的设计缺陷（这轮修的就是它）
+`markUiReady()` 在首帧回调里直接把 `start_attempts` 清零。
+而这次崩溃发生在首帧之后 2 秒 → 计数永远清不到 0 → 下次启动还是 L0 → 再崩 →
+安全模式一次都进不去。也就是说「自动降级启动」写了但没生效。
+
+### 本轮改动
+1. GeekgramDiag
+   - `markUiReady()` 不再清零：只置 uiReady + `markStage`，等首帧后 20 秒（STABLE_WINDOW_MS）
+     才清 `start_attempts`；中途挂了，下次启动就按 L1 跑。
+   - 降级计数改成**每进程启动记一次**（install 里 +1），不再是每次 LaunchActivity.onCreate 都 +1
+     （避免用户开合几次就被误判成崩溃）。
+   - 新增 `markStage()`：每走一步都 `mark` + 写 prefs（KEY_LAST_STAGE）。
+     原生崩溃 Java 抓不到堆栈，但下次启动第一行会打印「上次启动中断于：XXX」，
+     配合心跳写入的 KEY_LAST_HB（进程最后一次心跳第几秒）能锁死断点。
+   - 新增 `isProxyQuarantined / clearProxyQuarantine`：上次崩在「接管/代理/内核」这段，
+     本次直接跳过自动接管（App 先能用），用户重新打开代理开关即解除。
+   - 落盘加固：下载目录写失败不再静默（重开文件记录、下次重试），
+     另写 `geekgram-state.txt`（一行：存活秒数/当前步骤/界面就绪）与主日志交叉验证
+     —— 主日志停但 state 在更新 = 进程没死，只是主日志没写下去。
+2. ApplicationLoader
+   - Clash 自动接管 2500ms → 8000ms，内置内核自启 +1500ms → +4000ms（即 12s），
+     全部改用 markStage，隔离时跳过并写日志。
+   - 注意：接管/内核不再受 safeMode 控制，只受隔离控制（避免用户快速开合几次就丢了代理）。
+3. ClashProxyHelper
+   - applyAsync 探测前后、applyPort 应用代理前后加打点；
+   - `setAutoEnabled(true)` 时解除隔离。
+4. ConnectionsManager（发现的一处真隐患）
+   - 原生 `tgnet/Defines.h MAX_ACCOUNT_COUNT=5`，`getInstance(5..19)` 全部映射到第 5 个实例；
+     而 `setProxySettings` 按 Java 的 20 个槽位循环，等于对同一个原生实例连续十几次「断开重连」。
+   - 改成只对原生真实存在的 5 个实例下发（`NATIVE_MAX_CONNECTION_INSTANCES`），
+     5 以上的账号本来也是共用第 5 个实例，行为等价。
+5. GeekgramUpdateChecker 加一条「云更新检查返回」打点，排除它。
+
+### 验证
+- BUILD SUCCESSFUL 7m30s（:TMessagesProj_App:assembleAfatRelease）
+- 二次构建 compile/minify/package 全部 UP-TO-DATE（确认产物=当前源码）
+- aapt2：com.geekrem.messenger / 73279 / 13.3.9
+- apksigner：SHA-256 d221217b…526fd4（与 13.3.8 一致，可覆盖安装）
+- dex 实测命中 `geekgram-state.txt`、`上次启动中断于：`、`代理探测 开始（本机 Clash）`、
+  `应用代理设置 开始（127.0.0.1:`、`已隔离`
+- 未在真机运行（沙箱无设备）
+
+### 下轮待办
+- 若日志显示仍断在「应用代理设置」→ 基本可确认是原生 tgnet 代理链路，
+  下一步放开原生 MAX_ACCOUNT_COUNT 并全量重编原生库
+- 若两个日志文件一起停在「启动稳定」→ 崩溃与启动无关，转查运行期
