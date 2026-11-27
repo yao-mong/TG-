@@ -417,11 +417,19 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
 
         instance = this;
-        org.telegram.messenger.GeekgramDiag.mark("LaunchActivity.onCreate 进入");
+        org.telegram.messenger.GeekgramDiag.beginUiLaunch();
+        org.telegram.messenger.GeekgramDiag.mark("LaunchActivity.onCreate 进入（安全模式=L"
+                + org.telegram.messenger.GeekgramDiag.getSafeModeLevel() + "）");
         ApplicationLoader.postInitApplication();
         org.telegram.messenger.GeekgramDiag.mark("postInitApplication 返回，开始建界面");
         AndroidUtilities.checkDisplaySize(this, getResources().getConfiguration());
+        org.telegram.messenger.GeekgramDiag.mark("displaySize 检查完成");
         currentAccount = UserConfig.selectedAccount;
+        try {
+            org.telegram.messenger.GeekgramDiag.mark("当前账号=" + currentAccount
+                    + " 已登录=" + UserConfig.getInstance(currentAccount).isClientActivated());
+        } catch (Throwable ignore) {
+        }
         if (BuildVars.DEBUG_VERSION || BuildVars.DEBUG_PRIVATE_VERSION) {
             registerDebugThemeReceiver();
         }
@@ -458,16 +466,24 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         flagSecureReason.attach();
 
         super.onCreate(savedInstanceState);
+        org.telegram.messenger.GeekgramDiag.mark("Activity 基类 onCreate 完成");
         if (Build.VERSION.SDK_INT >= 24) {
             AndroidUtilities.isInMultiwindow = isInMultiWindowMode();
         }
         // Geekgram: 静默检查云更新（未配置地址则自动跳过）
-        try {
-            GeekgramUpdateChecker.checkOnStart(this);
-        } catch (Throwable ignore) {
+        if (org.telegram.messenger.GeekgramDiag.getSafeModeLevel() >= 1) {
+            org.telegram.messenger.GeekgramDiag.mark("跳过云更新检查（安全模式）");
+        } else {
+            try {
+                GeekgramUpdateChecker.checkOnStart(this);
+                org.telegram.messenger.GeekgramDiag.mark("云更新检查已发起");
+            } catch (Throwable ignore) {
+            }
         }
         Theme.createCommonChatResources();
+        org.telegram.messenger.GeekgramDiag.mark("Theme 通用资源完成");
         Theme.createDialogsResources(this);
+        org.telegram.messenger.GeekgramDiag.mark("Theme 对话资源完成");
         if (SharedConfig.passcodeHash.length() != 0 && SharedConfig.appLocked) {
             SharedConfig.lastPauseTime = (int) (SystemClock.elapsedRealtime() / 1000);
         }
@@ -478,6 +494,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         frameLayout.setClipToPadding(false);
         frameLayout.setClipChildren(false);
         setContentView(frameLayout);
+        org.telegram.messenger.GeekgramDiag.mark("setContentView 完成");
         rootAnimatedInsetsListener = new WindowAnimatedInsetsProvider(frameLayout);
         PipCoordinator.getInstance().onActivityCreate(this, createActivityVisibilityController(false));
 
@@ -580,10 +597,13 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         LiteMode.addOnPowerSaverAppliedListener(onPowerSaverCallback = this::onPowerSaver);
         if (actionBarLayout.getFragmentStack().isEmpty() && (layersActionBarLayout == null || layersActionBarLayout.getFragmentStack().isEmpty())) {
             if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
+                org.telegram.messenger.GeekgramDiag.mark("账号未登录，加载登录页");
                 actionBarLayout.addFragmentToStack(getClientNotActivatedFragment());
             } else {
+                org.telegram.messenger.GeekgramDiag.mark("加载主界面 MainTabsActivity");
                 MainTabsActivity mainTabsActivity = new MainTabsActivity();
                 actionBarLayout.addFragmentToStack(mainTabsActivity);
+                org.telegram.messenger.GeekgramDiag.mark("MainTabsActivity 加入成功");
             }
 
             try {
@@ -662,9 +682,28 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 FileLog.e(e);
             }
         }
+        org.telegram.messenger.GeekgramDiag.mark("主界面片段已加入，onCreate 收尾");
         checkLayout();
         checkSystemBarColors();
         handleIntent(getIntent(), false, savedInstanceState != null, false, null, true, true);
+        org.telegram.messenger.GeekgramDiag.mark("handleIntent 完成，onCreate 结束");
+        try {
+            final android.view.View decorView = getWindow() == null ? null : getWindow().getDecorView();
+            if (decorView != null) {
+                decorView.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                    @Override
+                    public boolean onPreDraw() {
+                        try {
+                            decorView.getViewTreeObserver().removeOnPreDrawListener(this);
+                        } catch (Throwable ignore) {
+                        }
+                        org.telegram.messenger.GeekgramDiag.markUiReady();
+                        return true;
+                    }
+                });
+            }
+        } catch (Throwable ignore) {
+        }
         try {
             String os1 = Build.DISPLAY;
             String os2 = Build.USER;
@@ -7217,6 +7256,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @Override
     protected void onResume() {
         super.onResume();
+        org.telegram.messenger.GeekgramDiag.mark("LaunchActivity.onResume");
         WidgetMedia.onAppPaused(false);
         isResumed = true;
         PipCoordinator.getInstance().onActivityResume(this);

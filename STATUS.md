@@ -193,3 +193,28 @@ versionCode 73149 / versionName 13.2.7 / 包名 com.geekrem.messenger
 - apksigner：SHA-256 d221217b…526fd4（与 13.3.6 一致，可覆盖安装）
 - dex 内命中 `geekgram-startup-log.txt`（诊断类已进包）
 - 未在真机运行（沙箱无设备）
+
+## Geekgram 正式版 13.3.8（2026-11-27，v24 · 启动闪退定位 v2 + 自动降级启动）
+- 13.3.8 / versionCode 73269 / 包名 com.geekrem.messenger；APK：output/Geekgram-13.3.8-73269.apk
+- 用户回传 13.3.7 的 geekgram-startup-log.txt（11-22 14:52）分析结论：
+  1) 日志完整走完 onCreate → postInit 完成（账号 0~19 全部 ok，activated=0/3），
+     但整份日志里没有「LaunchActivity.onCreate 进入」，也没有任何崩溃堆栈 →
+     这份日志很可能被其它进程（组件沙箱/推送）覆盖，或那次进程不是从界面启动的，
+     说明单文件日志不可靠，必须按进程拆文件。
+  2) 日志停在 postInit 完成之后没有任何异常 → 要么是原生层崩溃（Java 抓不到），
+     要么是主线程卡死被系统杀掉。
+- 本轮改法：
+  - GeekgramDiag 重写：主进程写 geekgram-startup-log.txt，其它进程写 geekgram-log-<进程名>.txt，
+    不再互相覆盖；加心跳线程（前 20s 每 2s 一条），8s 未出界面 dump 主线程调用栈；
+    新增 start_attempts 计数（LaunchActivity.onCreate +1，首帧绘制清零）。
+  - 自动降级启动：上次没走进界面 → 本次 L1/L2/L3 逐级收窄
+    （L1 关代理接管/内核自启/组件预热/推送/云更新/计费；L2 槽位收到前 5；L3 只处理槽位 0）。
+  - LaunchActivity 全流程打点（displaySize / 当前账号 / 基类 onCreate / Theme×2 /
+    setContentView / MainTabsActivity / handleIntent / onResume / 首帧 preDraw）。
+- 验证：BUILD SUCCESSFUL 6m34s；aapt2 → com.geekrem.messenger / 73269 / 13.3.8 / label=Geekgram；
+  apksigner SHA-256 d221217b…526fd4（可覆盖安装）；
+  dex 实测命中 geekgram-log- / 安全模式 / 心跳 / 首帧已绘制 / LaunchActivity.onCreate 进入
+- 仍未在真机运行（沙箱无设备）
+- 已知未修：原生层 tgnet/Defines.h MAX_ACCOUNT_COUNT=5 与 Java 的 20 槽位不一致，
+  连接实例索引 ≥5 会越界；账号数 ≤5 时不受影响。下轮若确认与槽位有关，
+  同步把原生 MAX_ACCOUNT_COUNT 放开并全量重编原生库。

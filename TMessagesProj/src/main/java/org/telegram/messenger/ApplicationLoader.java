@@ -205,6 +205,22 @@ public class ApplicationLoader extends Application {
         }
     }
 
+    /**
+     * 启动时实际处理多少个账号槽位。
+     * 安全模式（上次启动没走到界面）下逐级收窄，用来把出问题的范围一步步缩掉：
+     * L0 = 全部槽位，L2 = 只处理前 5 个（贴合原生层的连接实例上限），L3 = 只处理第 0 个。
+     */
+    private static int accountSlotLimit() {
+        final int level = GeekgramDiag.getSafeModeLevel();
+        if (level >= 3) {
+            return 1;
+        }
+        if (level >= 2) {
+            return Math.min(5, UserConfig.MAX_ACCOUNT_COUNT);
+        }
+        return UserConfig.MAX_ACCOUNT_COUNT;
+    }
+
     private static void postInitApplicationInternal() {
         GeekgramDiag.mark("postInit 开始");
         NativeLoader.initNativeLibs(ApplicationLoader.applicationContext);
@@ -268,8 +284,10 @@ public class ApplicationLoader extends Application {
         SharedConfig.loadConfig();
         GeekgramDiag.mark("SharedConfig ok");
         SharedPrefsHelper.init(applicationContext);
-        GeekgramDiag.mark("账号配置开始");
-        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) { //TODO improve account
+        final int slotLimit = accountSlotLimit();
+        GeekgramDiag.mark("账号配置开始 槽位=" + slotLimit + "/" + UserConfig.MAX_ACCOUNT_COUNT
+                + (slotLimit < UserConfig.MAX_ACCOUNT_COUNT ? "（安全模式收窄）" : ""));
+        for (int a = 0; a < slotLimit; a++) { //TODO improve account
             try {
                 GeekgramDiag.mark("账号 " + a + " 加载");
                 UserConfig.getInstance(a).loadConfig();
@@ -326,16 +344,24 @@ public class ApplicationLoader extends Application {
                 GeekgramDiag.markThrowable("账号 " + a + " 联系人/下载初始化失败（已跳过）", e);
             }
         }
-        try {
-            BillingController.getInstance().startConnection();
-        } catch (Throwable e) {
-            FileLog.e(e);
+        if (GeekgramDiag.getSafeModeLevel() >= 1) {
+            GeekgramDiag.mark("跳过计费连接（安全模式 L" + GeekgramDiag.getSafeModeLevel() + "）");
+        } else {
+            try {
+                BillingController.getInstance().startConnection();
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
         }
         GeekgramDiag.mark("postInit 完成");
         // HTML widgets: the isolated engine's process up front, after the app's own start, so that a widget's first
         // frame does not wait for it.
-        AndroidUtilities.runOnUIThread(() -> Utilities.globalQueue.postRunnable(
-                () -> org.telegram.utils.twidget.WidgetSandboxSession.prewarmEngine(applicationContext)), 3000);
+        if (GeekgramDiag.getSafeModeLevel() >= 1) {
+            GeekgramDiag.mark("跳过组件沙箱预热（安全模式 L" + GeekgramDiag.getSafeModeLevel() + "）");
+        } else {
+            AndroidUtilities.runOnUIThread(() -> Utilities.globalQueue.postRunnable(
+                    () -> org.telegram.utils.twidget.WidgetSandboxSession.prewarmEngine(applicationContext)), 3000);
+        }
     }
 
     public ApplicationLoader() {
@@ -431,8 +457,15 @@ public class ApplicationLoader extends Application {
         }
 
         applicationHandler = new Handler(applicationContext.getMainLooper());
+        GeekgramDiag.mark("applicationHandler 建立");
 
-        AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
+        final int safeMode = GeekgramDiag.getSafeModeLevel();
+
+        if (safeMode >= 1) {
+            GeekgramDiag.mark("跳过推送保活服务（安全模式 L" + safeMode + "）");
+        } else {
+            AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
+        }
 
         try {
             LauncherIconController.tryFixLauncherIconIfNeeded();
@@ -440,32 +473,44 @@ public class ApplicationLoader extends Application {
             FileLog.e(e);
             GeekgramDiag.markThrowable("桌面图标修正失败（已跳过）", e);
         }
-        try {
-            ProxyRotationController.init();
-        } catch (Throwable e) {
-            FileLog.e(e);
-            GeekgramDiag.markThrowable("代理轮换初始化失败（已跳过）", e);
+        if (safeMode >= 1) {
+            GeekgramDiag.mark("跳过代理轮换初始化（安全模式 L" + safeMode + "）");
+        } else {
+            try {
+                ProxyRotationController.init();
+            } catch (Throwable e) {
+                FileLog.e(e);
+                GeekgramDiag.markThrowable("代理轮换初始化失败（已跳过）", e);
+            }
         }
-        GeekgramDiag.mark("onCreate 完成，等界面");
+        GeekgramDiag.mark("onCreate 完成，等界面（安全模式=L" + safeMode + "）");
 
         // Geekgram: 启动后自动探测本机 Clash，探到就接管连接（可在代理页关闭）；
         // 如果填过订阅，再把内置内核拉起来接管
-        AndroidUtilities.runOnUIThread(() -> {
-            try {
-                ClashProxyHelper.autoInit();
-            } catch (Throwable e) {
-                FileLog.e(e);
-                GeekgramDiag.markThrowable("Clash 自动接管失败（已跳过）", e);
-            }
+        if (safeMode >= 1) {
+            GeekgramDiag.mark("跳过 Clash 自动接管与内置内核自启（安全模式 L" + safeMode + "）");
+        } else {
             AndroidUtilities.runOnUIThread(() -> {
+                GeekgramDiag.mark("Clash 自动接管 开始");
                 try {
-                    ClashCoreManager.autoStart();
+                    ClashProxyHelper.autoInit();
+                    GeekgramDiag.mark("Clash 自动接管 完成");
                 } catch (Throwable e) {
                     FileLog.e(e);
-                    GeekgramDiag.markThrowable("内置内核自启失败（已跳过）", e);
+                    GeekgramDiag.markThrowable("Clash 自动接管失败（已跳过）", e);
                 }
-            }, 1500);
-        }, 2500);
+                AndroidUtilities.runOnUIThread(() -> {
+                    GeekgramDiag.mark("内置内核自启 开始");
+                    try {
+                        ClashCoreManager.autoStart();
+                        GeekgramDiag.mark("内置内核自启 完成");
+                    } catch (Throwable e) {
+                        FileLog.e(e);
+                        GeekgramDiag.markThrowable("内置内核自启失败（已跳过）", e);
+                    }
+                }, 1500);
+            }, 2500);
+        }
 
         //if (BuildConfig.DEBUG_PRIVATE_VERSION) {
         //    Choreographer60FpsContent.getInstance().addFrameCallback(debugEverySecondChecks, 1);
