@@ -193,45 +193,13 @@ public class ApplicationLoader extends Application {
             return;
         }
         applicationInited = true;
-        try {
-            postInitApplicationInternal();
-        } catch (Throwable e) {
-            // Geekgram: 启动里某一步出错不再让整个 App 直接闪退，先记录下来
-            FileLog.e(e);
-            try {
-                GeekgramDiag.markThrowable("postInitApplication 失败", e);
-            } catch (Throwable ignore) {
-            }
-        }
-    }
-
-    /**
-     * 启动时实际处理多少个账号槽位。
-     * 安全模式（上次启动没走到界面）下逐级收窄，用来把出问题的范围一步步缩掉：
-     * L0 = 全部槽位，L2 = 只处理前 5 个（贴合原生层的连接实例上限），L3 = 只处理第 0 个。
-     */
-    private static int accountSlotLimit() {
-        final int level = GeekgramDiag.getSafeModeLevel();
-        if (level >= 3) {
-            return 1;
-        }
-        if (level >= 2) {
-            return Math.min(5, UserConfig.MAX_ACCOUNT_COUNT);
-        }
-        return UserConfig.MAX_ACCOUNT_COUNT;
-    }
-
-    private static void postInitApplicationInternal() {
-        GeekgramDiag.mark("postInit 开始");
         NativeLoader.initNativeLibs(ApplicationLoader.applicationContext);
-        GeekgramDiag.mark("原生库加载完成");
 
         try {
             LocaleController.getInstance(); //TODO improve
         } catch (Exception e) {
             e.printStackTrace();
         }
-        GeekgramDiag.mark("LocaleController ok");
 
         try {
             connectivityManager = (ConnectivityManager) ApplicationLoader.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -282,86 +250,45 @@ public class ApplicationLoader extends Application {
         }
 
         SharedConfig.loadConfig();
-        GeekgramDiag.mark("SharedConfig ok");
         SharedPrefsHelper.init(applicationContext);
-        final int slotLimit = accountSlotLimit();
-        GeekgramDiag.mark("账号配置开始 槽位=" + slotLimit + "/" + UserConfig.MAX_ACCOUNT_COUNT
-                + (slotLimit < UserConfig.MAX_ACCOUNT_COUNT ? "（安全模式收窄）" : ""));
-        for (int a = 0; a < slotLimit; a++) { //TODO improve account
-            try {
-                GeekgramDiag.mark("账号 " + a + " 加载");
-                UserConfig.getInstance(a).loadConfig();
-                // Geekgram: 槽位多了以后，空槽位不再提前建控制器，避免白白占内存
-                final boolean activated = UserConfig.getInstance(a).isClientActivated();
-                if (activated) {
-                    MessagesController.getInstance(a);
-                }
-                if (a == 0) {
-                    SharedConfig.pushStringStatus = "__FIREBASE_GENERATING_SINCE_" + ConnectionsManager.getInstance(a).getCurrentTime() + "__";
-                } else if (activated) {
-                    ConnectionsManager.getInstance(a);
-                }
-                TLRPC.User user = UserConfig.getInstance(a).getCurrentUser();
-                if (user != null) {
-                    MessagesController.getInstance(a).putUser(user, true);
-                    SendMessagesHelper.getInstance(a).checkUnsentMessages();
-                }
-                GeekgramDiag.mark("账号 " + a + " ok activated=" + activated);
-            } catch (Throwable e) {
-                FileLog.e(e);
-                GeekgramDiag.markThrowable("账号 " + a + " 初始化失败（已跳过）", e);
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) { //TODO improve account
+            UserConfig.getInstance(a).loadConfig();
+            // Geekgram: 槽位多了以后，空槽位不再提前建控制器，避免白白占内存
+            final boolean activated = UserConfig.getInstance(a).isClientActivated();
+            if (activated) {
+                MessagesController.getInstance(a);
+            }
+            if (a == 0) {
+                SharedConfig.pushStringStatus = "__FIREBASE_GENERATING_SINCE_" + ConnectionsManager.getInstance(a).getCurrentTime() + "__";
+            } else if (activated) {
+                ConnectionsManager.getInstance(a);
+            }
+            TLRPC.User user = UserConfig.getInstance(a).getCurrentUser();
+            if (user != null) {
+                MessagesController.getInstance(a).putUser(user, true);
+                SendMessagesHelper.getInstance(a).checkUnsentMessages();
             }
         }
-        GeekgramDiag.mark("账号配置完成");
 
         ApplicationLoader app = (ApplicationLoader) ApplicationLoader.applicationContext;
-        try {
-            app.initPushServices();
-        } catch (Throwable e) {
-            FileLog.e(e);
-            GeekgramDiag.markThrowable("initPushServices 失败（已跳过）", e);
-        }
+        app.initPushServices();
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("app initied");
         }
 
-        try {
-            MediaController.getInstance();
-        } catch (Throwable e) {
-            FileLog.e(e);
-            GeekgramDiag.markThrowable("MediaController 失败（已跳过）", e);
-        }
-        GeekgramDiag.mark("MediaController ok");
+        MediaController.getInstance();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) { //TODO improve account
             if (!UserConfig.getInstance(a).isClientActivated()) {
                 continue;
             }
-            try {
-                ContactsController.getInstance(a).checkAppAccount();
-                DownloadController.getInstance(a);
-            } catch (Throwable e) {
-                FileLog.e(e);
-                GeekgramDiag.markThrowable("账号 " + a + " 联系人/下载初始化失败（已跳过）", e);
-            }
+            ContactsController.getInstance(a).checkAppAccount();
+            DownloadController.getInstance(a);
         }
-        if (GeekgramDiag.getSafeModeLevel() >= 1) {
-            GeekgramDiag.mark("跳过计费连接（安全模式 L" + GeekgramDiag.getSafeModeLevel() + "）");
-        } else {
-            try {
-                BillingController.getInstance().startConnection();
-            } catch (Throwable e) {
-                FileLog.e(e);
-            }
-        }
-        GeekgramDiag.mark("postInit 完成");
+        BillingController.getInstance().startConnection();
         // HTML widgets: the isolated engine's process up front, after the app's own start, so that a widget's first
         // frame does not wait for it.
-        if (GeekgramDiag.getSafeModeLevel() >= 1) {
-            GeekgramDiag.mark("跳过组件沙箱预热（安全模式 L" + GeekgramDiag.getSafeModeLevel() + "）");
-        } else {
-            AndroidUtilities.runOnUIThread(() -> Utilities.globalQueue.postRunnable(
-                    () -> org.telegram.utils.twidget.WidgetSandboxSession.prewarmEngine(applicationContext)), 3000);
-        }
+        AndroidUtilities.runOnUIThread(() -> Utilities.globalQueue.postRunnable(
+                () -> org.telegram.utils.twidget.WidgetSandboxSession.prewarmEngine(applicationContext)), 3000);
     }
 
     public ApplicationLoader() {
@@ -378,11 +305,6 @@ public class ApplicationLoader extends Application {
         }
 
         super.onCreate();
-
-        try {
-            GeekgramDiag.install(this);
-        } catch (Throwable ignore) {
-        }
 
         // The widget engine's isolated process has no files, network or accounts: none of the client starts there.
         if (org.telegram.utils.twidget.WidgetEngineService.isEngineProcess()) {
@@ -457,65 +379,18 @@ public class ApplicationLoader extends Application {
         }
 
         applicationHandler = new Handler(applicationContext.getMainLooper());
-        GeekgramDiag.mark("applicationHandler 建立");
 
-        final int safeMode = GeekgramDiag.getSafeModeLevel();
+        AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
 
-        if (safeMode >= 1) {
-            GeekgramDiag.mark("跳过推送保活服务（安全模式 L" + safeMode + "）");
-        } else {
-            AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
-        }
-
-        try {
-            LauncherIconController.tryFixLauncherIconIfNeeded();
-        } catch (Throwable e) {
-            FileLog.e(e);
-            GeekgramDiag.markThrowable("桌面图标修正失败（已跳过）", e);
-        }
-        if (safeMode >= 1) {
-            GeekgramDiag.mark("跳过代理轮换初始化（安全模式 L" + safeMode + "）");
-        } else {
-            try {
-                ProxyRotationController.init();
-            } catch (Throwable e) {
-                FileLog.e(e);
-                GeekgramDiag.markThrowable("代理轮换初始化失败（已跳过）", e);
-            }
-        }
-        GeekgramDiag.mark("onCreate 完成，等界面（安全模式=L" + safeMode + "）");
+        LauncherIconController.tryFixLauncherIconIfNeeded();
+        ProxyRotationController.init();
 
         // Geekgram: 启动后自动探测本机 Clash，探到就接管连接（可在代理页关闭）；
         // 如果填过订阅，再把内置内核拉起来接管
-        //
-        // 注意：这两件事以前是启动后 2.5 秒就跑，正好压在「界面刚画出来」那一段，
-        // 出问题时分不清是谁把进程带走的。现在推到启动 8 秒 / 12 秒之后，
-        // 而且每一步都写进磁盘（markStage），下次启动能直接读到断在哪。
-        if (GeekgramDiag.isProxyQuarantined()) {
-            GeekgramDiag.mark("跳过 Clash 自动接管与内置内核自启（上次崩在这一段，已隔离；"
-                    + "到「设置 → 数据和存储 → 代理」里把 Clash 本机代理关掉再打开就能重新开启）");
-        } else {
-            AndroidUtilities.runOnUIThread(() -> {
-                GeekgramDiag.markStage("Clash 自动接管 开始");
-                try {
-                    ClashProxyHelper.autoInit();
-                    GeekgramDiag.markStage("Clash 自动接管 完成");
-                } catch (Throwable e) {
-                    FileLog.e(e);
-                    GeekgramDiag.markThrowable("Clash 自动接管失败（已跳过）", e);
-                }
-                AndroidUtilities.runOnUIThread(() -> {
-                    GeekgramDiag.markStage("内置内核自启 开始");
-                    try {
-                        ClashCoreManager.autoStart();
-                        GeekgramDiag.markStage("内置内核自启 完成");
-                    } catch (Throwable e) {
-                        FileLog.e(e);
-                        GeekgramDiag.markThrowable("内置内核自启失败（已跳过）", e);
-                    }
-                }, 4000);
-            }, 8000);
-        }
+        AndroidUtilities.runOnUIThread(() -> {
+            ClashProxyHelper.autoInit();
+            AndroidUtilities.runOnUIThread(ClashCoreManager::autoStart, 1500);
+        }, 2500);
 
         //if (BuildConfig.DEBUG_PRIVATE_VERSION) {
         //    Choreographer60FpsContent.getInstance().addFrameCallback(debugEverySecondChecks, 1);

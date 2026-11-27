@@ -29,7 +29,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Geekgram 测试版：把本机当前账号的数据导出成一个 zip。
+ * Geekgram：把本机当前账号的数据导出成一个 zip。
  * 导出的 zip 可以直接用「用账号文件登录」导回去（同机备份 / 换机登录）。
  */
 public class AccountDataExportActivity extends Activity {

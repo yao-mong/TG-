@@ -281,3 +281,26 @@ versionCode 73149 / versionName 13.2.7 / 包名 com.geekrem.messenger
 - 若日志显示仍断在「应用代理设置」→ 基本可确认是原生 tgnet 代理链路，
   下一步放开原生 MAX_ACCOUNT_COUNT 并全量重编原生库
 - 若两个日志文件一起停在「启动稳定」→ 崩溃与启动无关，转查运行期
+
+## Geekgram 13.3.10（2026-11-27，v23）
+- 需求：把 13.3.6 那版 APP 源码覆盖回正式版，应用名去掉「测试版」
+- 做法：源码退回 tag v13.3.6 (c64d72a) 基线
+  - `git checkout c64d72a --` ApplicationLoader / ClashProxyHelper / GeekgramUpdateChecker /
+    ConnectionsManager / LaunchActivity
+  - 删除 13.3.8 引入的 `GeekgramDiag.java`（无残留引用）
+  - 13.3.7~13.3.9 的启动诊断 / 安全模式 / 分进程日志全部撤掉
+- 应用名：`strings.xml` AppName = `Geekgram`（桌面标签已无「测试版」）；
+  `AccountDataExportActivity` 注释里的「测试版」一并清掉
+- 版本：APP_VERSION_NAME=13.3.10 / APP_VERSION_CODE=7329 → versionCode 73299（> 13.3.9 的 73279，可覆盖升级）
+- 包名 com.geekrem.messenger 不变；签名 SHA-256 d221217b…526fd4 与前几版一致
+- 保留：账号上限 20（UserConfig.MAX_ACCOUNT_COUNT=20）、账号文件登录、内核面板、防撤回、翻译设置
+
+### 验证
+- BUILD SUCCESSFUL 13m49s（:TMessagesProj_App:assembleAfatRelease）
+- aapt2：com.geekrem.messenger / 73299 / 13.3.10 / 61MB
+- application-label: `Geekgram`
+- apksigner：SHA-256 d221217b…526fd4
+- dex 实测：`GeekgramDiag` / `geekgram-state.txt` / `上次启动中断于` 命中 0（诊断代码已清干净）；
+  `geekgram_revoked_marks`、账号文件登录串仍在
+- APK：output/Geekgram-13.3.10-73299.apk + 安装说明
+- 未在真机运行（沙箱无设备）

@@ -223,7 +223,6 @@ public class GeekgramUpdateChecker {
                 error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             }
             checking = false;
-            GeekgramDiag.mark("云更新检查返回：" + (info != null ? "ok" : ("失败 " + error)));
             prefs().edit().putLong(PREF_LAST, System.currentTimeMillis()).apply();
             final Info result = info;
             final String err = error;
